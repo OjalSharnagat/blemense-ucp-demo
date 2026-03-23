@@ -60,17 +60,20 @@ const detectSequenceGap = (invoice: Invoice, existingInvoices: Invoice[]): boole
 export function validateInvoice(invoice: Invoice, options?: ValidateInvoiceOptions): ValidationError[] {
   const issues: ValidationError[] = [];
   const today = startOfDay(options?.today ?? new Date());
+  const sellerUsesGst = invoice.seller.gstRegistrationStatus === "REGISTERED" && !invoice.seller.compositionScheme;
 
-  const sellerGstin = validateGSTIN(invoice.seller.gstin || "");
-  if (!sellerGstin.valid) {
-    issues.push({
-      field: "seller.gstin",
-      message: "Seller GSTIN format is invalid.",
-      severity: "error",
-    });
+  if (sellerUsesGst) {
+    const sellerGstin = validateGSTIN(invoice.seller.gstin || "");
+    if (!sellerGstin.valid) {
+      issues.push({
+        field: "seller.gstin",
+        message: "Seller GSTIN format is invalid.",
+        severity: "error",
+      });
+    }
   }
 
-  if (invoice.buyer.isRegistered) {
+  if (sellerUsesGst && invoice.buyer.isRegistered) {
     const buyerGstin = validateGSTIN(invoice.buyer.gstin || "");
     if (!buyerGstin.valid) {
       issues.push({
@@ -112,7 +115,7 @@ export function validateInvoice(invoice: Invoice, options?: ValidateInvoiceOptio
     });
   }
 
-  if (invoice.taxBreakdown.igstAmount > 0 && (invoice.taxBreakdown.cgstAmount > 0 || invoice.taxBreakdown.sgstAmount > 0)) {
+  if (sellerUsesGst && invoice.taxBreakdown.igstAmount > 0 && (invoice.taxBreakdown.cgstAmount > 0 || invoice.taxBreakdown.sgstAmount > 0)) {
     issues.push({
       field: "taxBreakdown",
       message: "IGST and CGST/SGST cannot be applied together.",
@@ -128,23 +131,25 @@ export function validateInvoice(invoice: Invoice, options?: ValidateInvoiceOptio
     });
   }
 
-  invoice.lineItems.forEach((item, index) => {
-    if (!item.hsn?.trim()) {
-      issues.push({
-        field: `lineItems[${index}].hsn`,
-        message: `Line ${index + 1}: HSN/SAC is recommended.`,
-        severity: "warning",
-      });
-    } else if (!isValidHSNOrSAC(item.hsn)) {
-      issues.push({
-        field: `lineItems[${index}].hsn`,
-        message: `Line ${index + 1}: HSN/SAC must be 4 to 8 numeric digits.`,
-        severity: "error",
-      });
-    }
-  });
+  if (sellerUsesGst) {
+    invoice.lineItems.forEach((item, index) => {
+      if (!item.hsn?.trim()) {
+        issues.push({
+          field: `lineItems[${index}].hsn`,
+          message: `Line ${index + 1}: HSN/SAC is recommended.`,
+          severity: "warning",
+        });
+      } else if (!isValidHSNOrSAC(item.hsn)) {
+        issues.push({
+          field: `lineItems[${index}].hsn`,
+          message: `Line ${index + 1}: HSN/SAC must be 4 to 8 numeric digits.`,
+          severity: "error",
+        });
+      }
+    });
+  }
 
-  if (invoice.type === "TAX_INVOICE") {
+  if (sellerUsesGst) {
     const issueDate = startOfDay(parseDate(invoice.issueDate));
     if (issueDate.getTime() > today.getTime()) {
       issues.push({
@@ -163,7 +168,7 @@ export function validateInvoice(invoice: Invoice, options?: ValidateInvoiceOptio
     }
   }
 
-  if (invoice.taxBreakdown.grandTotal > 50000) {
+  if (sellerUsesGst && invoice.taxBreakdown.grandTotal > 50000) {
     if (!invoice.eWayBillNumber || !invoice.eWayBillDate || !invoice.vehicleNumber || !invoice.transporterName) {
       issues.push({
         field: "eWayBill",

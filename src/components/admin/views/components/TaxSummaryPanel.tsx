@@ -19,6 +19,7 @@ interface TaxSummaryPanelProps {
   supplyType: "B2B" | "B2CL" | "B2CS";
   isInterState: boolean;
   taxByRate: TaxRateRow[];
+  showTaxColumns?: boolean;
   onSaveDraft: () => void;
   onFinalize: () => void;
   disableActions?: boolean;
@@ -31,6 +32,7 @@ export default function TaxSummaryPanel({
   supplyType,
   isInterState,
   taxByRate,
+  showTaxColumns = true,
   onSaveDraft,
   onFinalize,
   disableActions,
@@ -51,30 +53,36 @@ export default function TaxSummaryPanel({
           <span>- {MONEY.format(discountTotal)}</span>
         </div>
         <div className="flex justify-between font-medium">
-          <span>Taxable Value</span>
+          <span>{showTaxColumns ? "Taxable Value" : "Bill Total"}</span>
           <span>{MONEY.format(totals.taxableValue)}</span>
         </div>
-        <div className="rounded-md border p-2 text-xs">
-          {taxByRate.map((row) =>
-            isInterState ? (
-              <div key={`igst-${row.rate}`} className="flex justify-between">
-                <span>IGST @ {row.rate}%</span>
-                <span>{MONEY.format(row.igst)}</span>
-              </div>
-            ) : (
-              <div key={`cgst-sgst-${row.rate}`} className="space-y-1">
-                <div className="flex justify-between">
-                  <span>CGST @ {row.rate / 2}%</span>
-                  <span>{MONEY.format(row.cgst)}</span>
+        {showTaxColumns ? (
+          <div className="rounded-md border p-2 text-xs">
+            {taxByRate.map((row) =>
+              isInterState ? (
+                <div key={`igst-${row.rate}`} className="flex justify-between">
+                  <span>IGST @ {row.rate}%</span>
+                  <span>{MONEY.format(row.igst)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span>SGST @ {row.rate / 2}%</span>
-                  <span>{MONEY.format(row.sgst)}</span>
+              ) : (
+                <div key={`cgst-sgst-${row.rate}`} className="space-y-1">
+                  <div className="flex justify-between">
+                    <span>CGST @ {row.rate / 2}%</span>
+                    <span>{MONEY.format(row.cgst)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>SGST @ {row.rate / 2}%</span>
+                    <span>{MONEY.format(row.sgst)}</span>
+                  </div>
                 </div>
-              </div>
-            ),
-          )}
-        </div>
+              ),
+            )}
+          </div>
+        ) : (
+          <p className="rounded-md border border-dashed bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
+            GST breakdown is hidden for this business profile.
+          </p>
+        )}
         <div className="flex justify-between border-t pt-2 text-lg font-semibold">
           <span>Grand Total</span>
           <span>{MONEY.format(totals.grandTotal)}</span>

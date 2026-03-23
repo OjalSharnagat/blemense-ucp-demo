@@ -14,6 +14,8 @@ interface LineItemRowProps {
   item: LineItem;
   isEditable: boolean;
   isInterState: boolean;
+  showTaxColumns?: boolean;
+  showHsnSac?: boolean;
   draggable?: boolean;
   onDragStart?: () => void;
   onDragOver?: (event: DragEvent<HTMLTableRowElement>) => void;
@@ -27,6 +29,8 @@ export default function LineItemRow({
   item,
   isEditable,
   isInterState,
+  showTaxColumns = true,
+  showHsnSac = true,
   draggable,
   onDragStart,
   onDragOver,
@@ -47,9 +51,6 @@ export default function LineItemRow({
       </td>
       <td className="min-w-48">
         <Input value={item.description} disabled={!isEditable} onChange={(e) => onUpdate({ description: e.target.value })} />
-      </td>
-      <td className="min-w-28">
-        <HSNSearch value={item.hsn} disabled={!isEditable} onChange={(value) => onUpdate({ hsn: value })} onRateSelect={(rate) => onUpdate({ gstRate: rate })} />
       </td>
       <td className="min-w-20">
         <Input type="number" value={item.quantity} disabled={!isEditable} onChange={(e) => onUpdate({ quantity: Number(e.target.value) || 0 })} />
@@ -76,15 +77,29 @@ export default function LineItemRow({
           </Select>
         </div>
       </td>
-      <td>{MONEY.format(tax.taxableValue)}</td>
-      <td className="min-w-20">
-        <Input type="number" value={item.gstRate} disabled={!isEditable} onChange={(e) => onUpdate({ gstRate: Number(e.target.value) || 0 })} />
-      </td>
-      {isInterState ? <td>{MONEY.format(tax.igstAmount)}</td> : <>
-        <td>{MONEY.format(tax.cgstAmount)}</td>
-        <td>{MONEY.format(tax.sgstAmount)}</td>
-      </>}
-      <td className="font-medium">{MONEY.format(rowTotal)}</td>
+      {showHsnSac ? (
+        <td className="min-w-28">
+          <HSNSearch
+            value={item.hsn}
+            disabled={!isEditable}
+            onChange={(value) => onUpdate({ hsn: value })}
+            onRateSelect={(rate) => onUpdate({ gstRate: rate })}
+          />
+        </td>
+      ) : null}
+      {showTaxColumns ? <td>{MONEY.format(tax.taxableValue)}</td> : null}
+      {showTaxColumns ? (
+        <td className="min-w-20">
+          <Input type="number" value={item.gstRate} disabled={!isEditable} onChange={(e) => onUpdate({ gstRate: Number(e.target.value) || 0 })} />
+        </td>
+      ) : null}
+      {showTaxColumns ? (
+        isInterState ? <td>{MONEY.format(tax.igstAmount)}</td> : <>
+          <td>{MONEY.format(tax.cgstAmount)}</td>
+          <td>{MONEY.format(tax.sgstAmount)}</td>
+        </>
+      ) : null}
+      <td className="font-medium">{MONEY.format(showTaxColumns ? rowTotal : tax.taxableValue)}</td>
       <td>
         <Button type="button" variant="ghost" size="icon" disabled={!isEditable} onClick={onDelete}>
           <Trash2 className="h-4 w-4" />

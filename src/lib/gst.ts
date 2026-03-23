@@ -1,5 +1,5 @@
 import { GSTIN_REGEX, INDIAN_STATES, type IndianState } from "../data/gst";
-import type { GSTREntry, Invoice, InvoiceType, LineItem, Party, TaxBreakdown } from "../data/billing";
+import type { BusinessProfile, GSTREntry, Invoice, InvoiceType, LineItem, Party, TaxBreakdown } from "../data/billing";
 
 export interface LineItemTaxResult {
   taxableValue: number;
@@ -186,6 +186,39 @@ export const computeInvoiceTotals = (lineItems: LineItem[], isInterState: boolea
   };
 };
 
+export const computeInvoiceTotalsForProfile = (
+  lineItems: LineItem[],
+  isInterState: boolean,
+  seller: Pick<BusinessProfile, "gstRegistrationStatus" | "compositionScheme">,
+): TaxBreakdown => {
+  const applyTax = seller.gstRegistrationStatus === "REGISTERED" && !seller.compositionScheme;
+  if (!applyTax) {
+    const taxableValue = round2(
+      lineItems.reduce((sum, item) => {
+        const subtotal = computeLineSubtotal(item);
+        const discountAmount = computeDiscountAmount(item, subtotal);
+        return sum + Math.max(0, subtotal - discountAmount);
+      }, 0),
+    );
+
+    return {
+      taxableValue,
+      cgstRate: 0,
+      cgstAmount: 0,
+      sgstRate: 0,
+      sgstAmount: 0,
+      igstRate: 0,
+      igstAmount: 0,
+      cessRate: 0,
+      cessAmount: 0,
+      totalTax: 0,
+      grandTotal: taxableValue,
+    };
+  }
+
+  return computeInvoiceTotals(lineItems, isInterState);
+};
+
 export const deriveStateFromGSTIN = (gstin: string): IndianState | undefined => {
   const normalized = gstin.trim().toUpperCase();
   if (normalized.length < 2) return undefined;
@@ -333,6 +366,7 @@ const EMPTY_BUCKET = {
 export const computeGSTRSummary = (invoices: Invoice[], period?: GSTRPeriod): GSTRSummary => {
   const eligible = invoices.filter((invoice) => {
     if (invoice.status === "DRAFT" || invoice.status === "CANCELLED") return false;
+    if (invoice.seller.gstRegistrationStatus !== "REGISTERED" || invoice.seller.compositionScheme) return false;
     return isDateWithinPeriod(invoice.issueDate, period);
   });
 

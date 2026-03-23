@@ -24,8 +24,8 @@ export default function SettingsView() {
                 <Building2 className="h-4 w-4" />
               </div>
               <div>
-                <p className="font-medium">Business & GST</p>
-                <p className="text-xs text-muted-foreground">Legal profile, GST registration, bank and invoice defaults.</p>
+                <p className="font-medium">Business Setup</p>
+                <p className="text-xs text-muted-foreground">Registration status, scale, profile, bank and invoice defaults.</p>
               </div>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />

@@ -5,6 +5,9 @@ import { Badge } from '../../ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
 import { fmt } from '../../../utils'
 import { useAdminStore } from '@/lib/store'
+import { useBillingStore } from '@/lib/billingStore'
+import { getBusinessModeConfig } from '@/lib/businessMode'
+import { getCurrentFinancialYear } from '@/lib/gst'
 import { Skeleton } from '../../ui/skeleton'
 
 type StatTrend = {
@@ -41,7 +44,9 @@ function getStatusVariant(status: string): 'default' | 'secondary' | 'destructiv
 
 export default function DashboardView() {
   const { orders, products, customers } = useAdminStore()
+  const { invoices, businessProfile } = useBillingStore()
   const [isLoading, setIsLoading] = useState(true)
+  const businessMode = getBusinessModeConfig(businessProfile)
 
   useEffect(() => {
     const timer = window.setTimeout(() => setIsLoading(false), 600)
@@ -97,6 +102,32 @@ export default function DashboardView() {
       .slice(0, 5)
   }, [products])
 
+  const businessSnapshot = useMemo(() => {
+    const currentFinancialYear = getCurrentFinancialYear(new Date())
+    const activeInvoices = invoices.filter((invoice) => invoice.status !== 'DRAFT' && invoice.status !== 'CANCELLED')
+    const thisYearInvoices = activeInvoices.filter((invoice) => invoice.financialYear === currentFinancialYear)
+    const turnover = thisYearInvoices.reduce((sum, invoice) => sum + invoice.taxBreakdown.grandTotal, 0)
+    const outstandingReceivables = activeInvoices.reduce((sum, invoice) => sum + Math.max(0, invoice.balanceDue), 0)
+    const taxPayable = thisYearInvoices.reduce((sum, invoice) => sum + invoice.taxBreakdown.totalTax, 0)
+    const threshold = businessProfile.businessCategory === 'SERVICES' ? 2000000 : 4000000
+    const compositionLimit = 15000000
+    const eInvoiceLimit = 50000000
+    const nearingThreshold = turnover >= threshold * 0.8
+    const nearingComposition = businessMode.mode === 'COMPOSITION' && turnover >= compositionLimit * 0.8
+    const eInvoiceNotice = businessMode.mode === 'GST' && turnover >= eInvoiceLimit
+
+    return {
+      currentFinancialYear,
+      turnover,
+      outstandingReceivables,
+      taxPayable,
+      threshold,
+      nearingThreshold,
+      nearingComposition,
+      eInvoiceNotice
+    }
+  }, [invoices, businessProfile, businessMode.mode])
+
   const statCards = [
     {
       label: 'Total Revenue',
@@ -123,6 +154,18 @@ export default function DashboardView() {
       icon: Package
     }
   ]
+
+  const businessCards = businessMode.mode === 'UNREGISTERED'
+    ? [
+        { label: 'Year-to-date sales', value: fmt.format(businessSnapshot.turnover) },
+        { label: 'Outstanding receivables', value: fmt.format(businessSnapshot.outstandingReceivables) },
+        { label: 'Mode', value: 'GST off' }
+      ]
+    : [
+        { label: 'Year-to-date turnover', value: fmt.format(businessSnapshot.turnover) },
+        { label: 'Outstanding receivables', value: fmt.format(businessSnapshot.outstandingReceivables) },
+        { label: 'Tax payable', value: fmt.format(businessSnapshot.taxPayable) }
+      ]
 
   return (
     <div className="dash-view space-y-6">
@@ -179,6 +222,57 @@ export default function DashboardView() {
                 </Card>
               )
             })}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <Card className="lg:col-span-2">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base font-semibold">Business Snapshot</CardTitle>
+                <Badge variant="secondary">{businessMode.title}</Badge>
+              </CardHeader>
+              <CardContent className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                {businessCards.map((card) => (
+                  <div key={card.label} className="rounded-md border p-3">
+                    <p className="text-xs text-muted-foreground">{card.label}</p>
+                    <p className="mt-1 text-lg font-semibold">{card.value}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base font-semibold">Threshold Watch</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                {businessMode.mode === 'UNREGISTERED' ? (
+                  <p className="text-muted-foreground">
+                    GST registration threshold: {businessProfile.businessCategory === 'SERVICES' ? '₹20 lakh' : '₹40 lakh'}.
+                  </p>
+                ) : null}
+                {businessMode.mode === 'COMPOSITION' ? (
+                  <p className="text-muted-foreground">Composition limit: ₹1.5 crore turnover.</p>
+                ) : null}
+                {businessMode.mode === 'GST' ? (
+                  <p className="text-muted-foreground">E-invoice threshold: ₹5 crore turnover.</p>
+                ) : null}
+                {businessSnapshot.nearingThreshold ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                    Your turnover is approaching the GST registration threshold.
+                  </p>
+                ) : null}
+                {businessSnapshot.nearingComposition ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
+                    Composition turnover is nearing the legal limit.
+                  </p>
+                ) : null}
+                {businessSnapshot.eInvoiceNotice ? (
+                  <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-blue-900">
+                    E-invoicing is likely mandatory now for this turnover band.
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

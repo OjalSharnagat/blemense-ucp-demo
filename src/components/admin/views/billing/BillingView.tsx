@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Eye, FilePlus2, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
+import { getBusinessModeConfig } from '@/lib/businessMode'
 import { useBillingStore } from '@/lib/billingStore'
 import { fmt } from '@/utils'
 import { Button } from '../../../ui/button'
@@ -10,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '.
 import InvoiceStatusBadge from '../components/InvoiceStatusBadge'
 
 export default function BillingView() {
-  const { invoices } = useBillingStore()
+  const { invoices, businessProfile } = useBillingStore()
+  const businessMode = getBusinessModeConfig(businessProfile)
   const [query, setQuery] = useState('')
 
   const filtered = useMemo(() => {
@@ -33,12 +35,14 @@ export default function BillingView() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Billing</h1>
-          <p className="text-sm text-muted-foreground">Manage invoices, credit notes, and debit notes.</p>
+          <p className="text-sm text-muted-foreground">
+            Manage {businessMode.mode === 'UNREGISTERED' ? 'bills' : businessMode.mode === 'COMPOSITION' ? 'bills of supply' : 'invoices, credit notes, and debit notes'}.
+          </p>
         </div>
         <Button asChild className="gap-2">
           <Link to="/admin/billing/new">
             <FilePlus2 className="h-4 w-4" />
-            New invoice
+            New {businessMode.mode === 'UNREGISTERED' ? 'bill' : businessMode.mode === 'COMPOSITION' ? 'bill of supply' : 'invoice'}
           </Link>
         </Button>
       </div>

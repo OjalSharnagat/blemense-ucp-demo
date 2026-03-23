@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Product } from '../../utils'
+import { useBillingStore } from '@/lib/billingStore'
+import { getBusinessModeConfig } from '@/lib/businessMode'
 import { Button } from '../ui/button'
 import {
   Dialog,
@@ -23,6 +25,8 @@ type ProductFormValues = {
   stock: number
   status: ProductStatus
   description: string
+  hsn: string
+  gstRate: number
 }
 
 const defaultValues: ProductFormValues = {
@@ -32,7 +36,9 @@ const defaultValues: ProductFormValues = {
   price: 0,
   stock: 0,
   status: 'active',
-  description: ''
+  description: '',
+  hsn: '',
+  gstRate: 0
 }
 
 export default function ProductPanel({
@@ -48,6 +54,8 @@ export default function ProductPanel({
   categories: string[]
   onSubmit: (values: ProductFormValues) => void
 }) {
+  const { businessProfile } = useBillingStore()
+  const businessMode = getBusinessModeConfig(businessProfile)
   const [values, setValues] = useState<ProductFormValues>(defaultValues)
 
   useEffect(() => {
@@ -61,7 +69,9 @@ export default function ProductPanel({
         price: product.price,
         stock: product.stock,
         status: (product.status || 'active') as ProductStatus,
-        description: product.description || ''
+        description: product.description || '',
+        hsn: product.hsn || '',
+        gstRate: product.gstRate || 0
       })
       return
     }
@@ -84,7 +94,9 @@ export default function ProductPanel({
       category: values.category.trim() || 'General',
       price: Math.max(0, Number(values.price) || 0),
       stock: Math.max(0, Number(values.stock) || 0),
-      description: values.description.trim()
+      description: values.description.trim(),
+      hsn: businessMode.showTaxColumns ? values.hsn.trim().toUpperCase() : '',
+      gstRate: businessMode.showTaxColumns ? Math.max(0, Number(values.gstRate) || 0) : 0
     })
   }
 
@@ -190,6 +202,35 @@ export default function ProductPanel({
               placeholder="Add product details"
             />
           </div>
+
+          {businessMode.showTaxColumns ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="product-hsn">HSN / SAC</label>
+                <Input
+                  id="product-hsn"
+                  value={values.hsn}
+                  onChange={(event) => setValues((prev) => ({ ...prev, hsn: event.target.value.toUpperCase() }))}
+                  placeholder="HSN or SAC"
+                />
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="product-gst-rate">GST Rate (%)</label>
+                <Input
+                  id="product-gst-rate"
+                  type="number"
+                  min={0}
+                  step="0.1"
+                  value={values.gstRate}
+                  onChange={(event) => setValues((prev) => ({ ...prev, gstRate: Number(event.target.value) }))}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed bg-slate-50 px-3 py-2 text-sm text-muted-foreground">
+              HSN/SAC and GST rate stay hidden for this business profile.
+            </div>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

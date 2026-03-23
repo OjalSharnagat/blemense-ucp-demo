@@ -20,6 +20,8 @@ export interface Product {
   description?: string
   createdAt?: string
   variants?: Variant[]
+  hsn?: string
+  gstRate?: number
 }
 
 export interface CartItem {

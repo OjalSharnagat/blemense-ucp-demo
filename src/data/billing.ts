@@ -1,11 +1,19 @@
 export type BusinessType = "PROPRIETORSHIP" | "PARTNERSHIP" | "PRIVATE_LIMITED" | "LLP" | "OTHER";
 export type GSTRegistrationType = "REGULAR" | "COMPOSITION" | "CASUAL" | "SEZ";
+export type GSTRegistrationStatus = "REGISTERED" | "UNREGISTERED";
+export type BusinessScale = "FREELANCER" | "SMALL" | "GROWING" | "ESTABLISHED";
+export type BusinessCategory = "GOODS" | "SERVICES" | "BOTH";
+export type PriceDisplayMode = "INCLUSIVE" | "EXCLUSIVE";
 
 export interface BusinessProfile {
-  gstin: string;
+  gstRegistrationStatus: GSTRegistrationStatus;
+  gstin?: string;
   legalName: string;
   tradeName: string;
   businessType?: BusinessType;
+  businessScale?: BusinessScale;
+  businessCategory?: BusinessCategory;
+  priceDisplayMode?: PriceDisplayMode;
   financialYearStartMonth?: "APRIL";
   address: string;
   addressLine2?: string;
@@ -29,6 +37,7 @@ export interface BusinessProfile {
   defaultTerms?: string;
   invoicePrefix?: string;
   startingSequenceNumber?: number;
+  setupComplete?: boolean;
   signatureUrl: string;
 }
 

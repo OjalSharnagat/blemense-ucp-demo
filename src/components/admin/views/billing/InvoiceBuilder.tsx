@@ -15,10 +15,11 @@ import {
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { BusinessProfile, Invoice, InvoiceType, LineItem, Party } from "@/data/billing";
 import { HSN_CODES, INDIAN_STATES } from "@/data/gst";
+import { getBusinessModeConfig } from "@/lib/businessMode";
 import { useBillingStore } from "@/lib/billingStore";
 import {
   amountInWords,
-  computeInvoiceTotals,
+  computeInvoiceTotalsForProfile,
   computeIsInterState,
   computeLineItemTax,
   generateInvoiceNumber,
@@ -107,7 +108,7 @@ const EMPTY_BUYER: Party = {
   isRegistered: true,
 };
 
-const emptyLineItem = (): LineItem => ({
+const emptyLineItem = (gstRate = 18): LineItem => ({
   id: uid("li"),
   description: "",
   hsn: "",
@@ -116,7 +117,7 @@ const emptyLineItem = (): LineItem => ({
   unitPrice: 0,
   discount: 0,
   discountType: "flat",
-  gstRate: 18,
+  gstRate,
   isService: false,
 });
 
@@ -178,7 +179,8 @@ const toLineItemsWithCharges = (state: InvoiceBuilderState): LineItem[] => {
 };
 
 const buildDefaultState = (businessProfile: BusinessProfile, party?: Party): InvoiceBuilderState => {
-  const defaultParty = party ?? EMPTY_BUYER;
+  const businessMode = getBusinessModeConfig(businessProfile);
+  const defaultParty = businessMode.showGstFields ? party ?? EMPTY_BUYER : EMPTY_BUYER;
   return {
     type: "TAX_INVOICE",
     issueDate: today,
@@ -195,11 +197,11 @@ const buildDefaultState = (businessProfile: BusinessProfile, party?: Party): Inv
       stateCode: defaultParty.stateCode || "",
       pincode: defaultParty.pincode || "",
     },
-    lineItems: [emptyLineItem()],
+    lineItems: [emptyLineItem(businessMode.showTaxColumns ? 18 : 0)],
     charges: {
-      freight: { amount: 0, gstRate: 18 },
-      packing: { amount: 0, gstRate: 18 },
-      other: { amount: 0, gstRate: 18 },
+      freight: { amount: 0, gstRate: businessMode.showTaxColumns ? 18 : 0 },
+      packing: { amount: 0, gstRate: businessMode.showTaxColumns ? 18 : 0 },
+      other: { amount: 0, gstRate: businessMode.showTaxColumns ? 18 : 0 },
     },
     eway: {
       eWayBillNumber: "",
@@ -260,6 +262,7 @@ export default function InvoiceBuilder() {
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [ackWarnings, setAckWarnings] = useState(false);
   const [form, setForm] = useState<InvoiceBuilderState>(() => buildDefaultState(businessProfile, parties[0]));
+  const businessMode = useMemo(() => getBusinessModeConfig(form.seller), [form.seller]);
 
   const existing = id ? invoices.find((item) => item.id === id) : undefined;
   const isNew = !id;
@@ -270,7 +273,7 @@ export default function InvoiceBuilder() {
     if (isNew) {
       const initial = buildDefaultState(businessProfile, parties[0]);
       setForm(initial);
-      setSelectedPartyId(parties[0]?.id ?? "");
+      setSelectedPartyId(getBusinessModeConfig(businessProfile).showGstFields ? parties[0]?.id ?? "" : "");
       return;
     }
     if (!existing) return;
@@ -293,7 +296,7 @@ export default function InvoiceBuilder() {
         stateCode: existing.buyer.stateCode,
         pincode: existing.buyer.pincode,
       },
-      lineItems: parsed.normal.length ? parsed.normal : [emptyLineItem()],
+      lineItems: parsed.normal.length ? parsed.normal : [emptyLineItem(businessMode.showTaxColumns ? 18 : 0)],
       charges: parsed.charges,
       eway: {
         eWayBillNumber: existing.eWayBillNumber ?? "",
@@ -327,7 +330,10 @@ export default function InvoiceBuilder() {
     () => computeIsInterState(form.seller.stateCode || businessProfile.stateCode, form.buyer.stateCode || ""),
     [form.seller.stateCode, form.buyer.stateCode, businessProfile.stateCode],
   );
-  const totals = useMemo(() => computeInvoiceTotals(allItems, isInterState), [allItems, isInterState]);
+  const totals = useMemo(
+    () => computeInvoiceTotalsForProfile(allItems, isInterState, form.seller),
+    [allItems, isInterState, form.seller],
+  );
   const subtotal = useMemo(() => allItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0), [allItems]);
   const discountTotal = useMemo(
     () =>
@@ -340,7 +346,7 @@ export default function InvoiceBuilder() {
   );
 
   const supplyType = getSupplyType(form.buyer, totals.grandTotal);
-  const showEWaySection = totals.grandTotal > 50000;
+  const showEWaySection = businessMode.showTaxColumns && totals.grandTotal > 50000;
 
   const taxByRate = useMemo(() => {
     const buckets = new Map<
@@ -420,7 +426,7 @@ export default function InvoiceBuilder() {
       setShowNewParty(true);
       setForm((prev) => ({
         ...prev,
-        buyer: { ...EMPTY_BUYER, id: uid("pty"), isRegistered: true },
+        buyer: { ...EMPTY_BUYER, id: uid("pty"), isRegistered: businessMode.showGstFields },
       }));
       return;
     }
@@ -434,13 +440,13 @@ export default function InvoiceBuilder() {
   };
 
   const addLineItem = () => {
-    setForm((prev) => ({ ...prev, lineItems: [...prev.lineItems, emptyLineItem()] }));
+    setForm((prev) => ({ ...prev, lineItems: [...prev.lineItems, emptyLineItem(businessMode.showTaxColumns ? 18 : 0)] }));
   };
 
   const removeLineItem = (itemId: string) => {
     setForm((prev) => {
       const next = prev.lineItems.filter((item) => item.id !== itemId);
-      return { ...prev, lineItems: next.length ? next : [emptyLineItem()] };
+      return { ...prev, lineItems: next.length ? next : [emptyLineItem(businessMode.showTaxColumns ? 18 : 0)] };
     });
   };
 
@@ -454,7 +460,10 @@ export default function InvoiceBuilder() {
   const handleHsnChange = (itemId: string, value: string) => {
     const normalized = value.trim().toUpperCase();
     const matched = HSN_CODES.find((entry) => entry.code === normalized);
-    updateLineItem(itemId, matched ? { hsn: matched.code, gstRate: matched.defaultGstRate } : { hsn: normalized });
+    updateLineItem(
+      itemId,
+      businessMode.showTaxColumns && matched ? { hsn: matched.code, gstRate: matched.defaultGstRate } : { hsn: normalized },
+    );
   };
 
   const onGstinBlur = () => {
@@ -495,6 +504,8 @@ export default function InvoiceBuilder() {
   const buildBuyerForSave = (): Party => ({
     ...form.buyer,
     name: form.buyer.name.trim() || "Walk-in Customer",
+    isRegistered: businessMode.showGstFields ? form.buyer.isRegistered : false,
+    gstin: businessMode.showGstFields ? form.buyer.gstin : "",
     state: form.buyer.state || form.placeOfSupply || businessProfile.state,
     stateCode: form.buyer.stateCode || INDIAN_STATES.find((s) => s.name === (form.placeOfSupply || form.buyer.state))?.tinCode || "",
   });
@@ -506,7 +517,7 @@ export default function InvoiceBuilder() {
     const sequence = existing ? 1 : getNextSequencePreview(form.type, financialYear);
     const invoiceNumber = existing?.invoiceNumber ?? generateInvoiceNumber(form.type, financialYear, sequence);
     const previewIsInterState = computeIsInterState(form.seller.stateCode || businessProfile.stateCode, buyer.stateCode || "");
-    const previewTax = computeInvoiceTotals(allItems, previewIsInterState);
+    const previewTax = computeInvoiceTotalsForProfile(allItems, previewIsInterState, form.seller);
 
     return {
       id: existing?.id ?? "draft-validation",
@@ -673,6 +684,10 @@ export default function InvoiceBuilder() {
               <CardTitle className="text-base">Section 1 - Document Header</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-md border bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                <p className="font-medium">{businessMode.title}</p>
+                <p className="text-xs text-muted-foreground">{businessMode.subtitle}</p>
+              </div>
               <div className="grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1 md:grid-cols-4">
                 {typeOptions.map((option) => (
                   <button
@@ -685,7 +700,7 @@ export default function InvoiceBuilder() {
                       form.type === option.value ? "bg-white text-slate-900 shadow" : "text-slate-600 hover:text-slate-900",
                     )}
                   >
-                    {option.label}
+                    {option.value === "TAX_INVOICE" ? businessMode.title : option.label}
                   </button>
                 ))}
               </div>
@@ -828,14 +843,22 @@ export default function InvoiceBuilder() {
                   </p>
                 </div>
                 <div className="text-sm">
-                  <p className="mb-2 rounded-md bg-emerald-50 px-3 py-2 font-semibold text-emerald-700">
-                    GSTIN: {form.seller.gstin}
-                  </p>
-                  {fieldIssues("seller.gstin").map((issue, idx) => (
-                    <p key={`seller-gstin-${idx}`} className="mb-1 text-xs text-rose-600">
-                      {issue.message}
+                  {businessMode.showGstFields ? (
+                    <>
+                      <p className="mb-2 rounded-md bg-emerald-50 px-3 py-2 font-semibold text-emerald-700">
+                        GSTIN: {form.seller.gstin || "Not set"}
+                      </p>
+                      {fieldIssues("seller.gstin").map((issue, idx) => (
+                        <p key={`seller-gstin-${idx}`} className="mb-1 text-xs text-rose-600">
+                          {issue.message}
+                        </p>
+                      ))}
+                    </>
+                  ) : (
+                    <p className="mb-2 rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700">
+                      GST registration hidden for this business profile
                     </p>
-                  ))}
+                  )}
                   <p>PAN: {form.seller.pan}</p>
                   <p>Email: {form.seller.email}</p>
                   <p>Phone: {form.seller.phone}</p>
@@ -873,33 +896,39 @@ export default function InvoiceBuilder() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={form.buyer.isRegistered ? "default" : "outline"}
-                  disabled={!isEditable}
-                  onClick={() => updateBuyer({ isRegistered: true })}
-                >
-                  Registered
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={!form.buyer.isRegistered ? "default" : "outline"}
-                  disabled={!isEditable}
-                  onClick={() => updateBuyer({ isRegistered: false, gstin: "" })}
-                >
-                  Unregistered
-                </Button>
-              </div>
+              {businessMode.showGstFields ? (
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={form.buyer.isRegistered ? "default" : "outline"}
+                    disabled={!isEditable}
+                    onClick={() => updateBuyer({ isRegistered: true })}
+                  >
+                    Registered
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={!form.buyer.isRegistered ? "default" : "outline"}
+                    disabled={!isEditable}
+                    onClick={() => updateBuyer({ isRegistered: false, gstin: "" })}
+                  >
+                    Unregistered
+                  </Button>
+                </div>
+              ) : (
+                <div className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  Buyer GST details are hidden in this business mode.
+                </div>
+              )}
 
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <p className="mb-1 text-xs text-muted-foreground">Buyer Name</p>
                   <Input value={form.buyer.name} disabled={!isEditable} onChange={(e) => updateBuyer({ name: e.target.value })} />
                 </div>
-                {form.buyer.isRegistered ? (
+                {businessMode.showGstFields && form.buyer.isRegistered ? (
                   <div>
                     <p className="mb-1 text-xs text-muted-foreground">GSTIN</p>
                     <Input
@@ -1076,17 +1105,17 @@ export default function InvoiceBuilder() {
                   <TableRow>
                     <TableHead>#</TableHead>
                     <TableHead>Description</TableHead>
-                    <TableHead>HSN/SAC</TableHead>
                     <TableHead>Qty</TableHead>
                     <TableHead>Unit</TableHead>
                     <TableHead>Rate</TableHead>
                     <TableHead>Discount</TableHead>
-                    <TableHead>Taxable Value</TableHead>
-                    <TableHead>GST%</TableHead>
-                    {isInterState ? <TableHead>IGST</TableHead> : <>
+                    {businessMode.showHsnSac ? <TableHead>HSN/SAC</TableHead> : null}
+                    {businessMode.showTaxColumns ? <TableHead>Taxable Value</TableHead> : null}
+                    {businessMode.showTaxColumns ? <TableHead>GST%</TableHead> : null}
+                    {businessMode.showTaxColumns ? (isInterState ? <TableHead>IGST</TableHead> : <>
                       <TableHead>CGST</TableHead>
                       <TableHead>SGST</TableHead>
-                    </>}
+                    </>) : null}
                     <TableHead>Total</TableHead>
                     <TableHead />
                   </TableRow>
@@ -1094,7 +1123,9 @@ export default function InvoiceBuilder() {
                 <TableBody>
                   {form.lineItems.map((item, idx) => {
                     const tax = computeLineItemTax(item, isInterState);
-                    const rowTotal = tax.taxableValue + tax.cgstAmount + tax.sgstAmount + tax.igstAmount;
+                    const rowTotal = businessMode.showTaxColumns
+                      ? tax.taxableValue + tax.cgstAmount + tax.sgstAmount + tax.igstAmount
+                      : tax.taxableValue;
                     return (
                       <TableRow
                         key={item.id}
@@ -1119,14 +1150,6 @@ export default function InvoiceBuilder() {
                             value={item.description}
                             disabled={!isEditable}
                             onChange={(e) => updateLineItem(item.id, { description: e.target.value })}
-                          />
-                        </TableCell>
-                        <TableCell className="min-w-28">
-                          <Input
-                            list="hsn-codes"
-                            value={item.hsn}
-                            disabled={!isEditable}
-                            onChange={(e) => handleHsnChange(item.id, e.target.value)}
                           />
                         </TableCell>
                         <TableCell className="min-w-20">
@@ -1179,23 +1202,37 @@ export default function InvoiceBuilder() {
                             </Select>
                           </div>
                         </TableCell>
-                        <TableCell>{MONEY.format(tax.taxableValue)}</TableCell>
-                        <TableCell className="min-w-20">
-                          <Input
-                            type="number"
-                            value={item.gstRate}
-                            disabled={!isEditable}
-                            onChange={(e) => updateLineItem(item.id, { gstRate: Number(e.target.value) || 0 })}
-                          />
-                        </TableCell>
-                        {isInterState ? (
-                          <TableCell>{MONEY.format(tax.igstAmount)}</TableCell>
-                        ) : (
-                          <>
-                            <TableCell>{MONEY.format(tax.cgstAmount)}</TableCell>
-                            <TableCell>{MONEY.format(tax.sgstAmount)}</TableCell>
-                          </>
-                        )}
+                        {businessMode.showHsnSac ? (
+                          <TableCell className="min-w-28">
+                            <Input
+                              list="hsn-codes"
+                              value={item.hsn}
+                              disabled={!isEditable}
+                              onChange={(e) => handleHsnChange(item.id, e.target.value)}
+                            />
+                          </TableCell>
+                        ) : null}
+                        {businessMode.showTaxColumns ? <TableCell>{MONEY.format(tax.taxableValue)}</TableCell> : null}
+                        {businessMode.showTaxColumns ? (
+                          <TableCell className="min-w-20">
+                            <Input
+                              type="number"
+                              value={item.gstRate}
+                              disabled={!isEditable}
+                              onChange={(e) => updateLineItem(item.id, { gstRate: Number(e.target.value) || 0 })}
+                            />
+                          </TableCell>
+                        ) : null}
+                        {businessMode.showTaxColumns ? (
+                          isInterState ? (
+                            <TableCell>{MONEY.format(tax.igstAmount)}</TableCell>
+                          ) : (
+                            <>
+                              <TableCell>{MONEY.format(tax.cgstAmount)}</TableCell>
+                              <TableCell>{MONEY.format(tax.sgstAmount)}</TableCell>
+                            </>
+                          )
+                        ) : null}
                         <TableCell className="font-medium">{MONEY.format(rowTotal)}</TableCell>
                         <TableCell>
                           <Button
@@ -1218,21 +1255,29 @@ export default function InvoiceBuilder() {
                   {issue.message}
                 </p>
               ))}
-              {validationIssues
-                .filter((issue) => issue.field.includes(".hsn"))
-                .slice(0, 3)
-                .map((issue, idx) => (
-                  <p key={`hsn-warning-${idx}`} className="mt-1 text-xs text-amber-700">
-                    {issue.message}
-                  </p>
-                ))}
-              <datalist id="hsn-codes">
-                {HSN_CODES.map((code) => (
-                  <option key={code.code} value={code.code}>
-                    {code.description}
-                  </option>
-                ))}
-              </datalist>
+              {businessMode.showTaxColumns ? (
+                <>
+                  {validationIssues
+                    .filter((issue) => issue.field.includes(".hsn"))
+                    .slice(0, 3)
+                    .map((issue, idx) => (
+                      <p key={`hsn-warning-${idx}`} className="mt-1 text-xs text-amber-700">
+                        {issue.message}
+                      </p>
+                    ))}
+                  <datalist id="hsn-codes">
+                    {HSN_CODES.map((code) => (
+                      <option key={code.code} value={code.code}>
+                        {code.description}
+                      </option>
+                    ))}
+                  </datalist>
+                </>
+              ) : (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  HSN/SAC and GST rate inputs are hidden for this business profile.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -1258,18 +1303,22 @@ export default function InvoiceBuilder() {
                       }))
                     }
                   />
-                  <Input
-                    type="number"
-                    className="mt-2"
-                    value={form.charges.freight.gstRate}
-                    disabled={!isEditable}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        charges: { ...prev.charges, freight: { ...prev.charges.freight, gstRate: Number(e.target.value) || 0 } },
-                      }))
-                    }
-                  />
+                  {businessMode.showTaxColumns ? (
+                    <Input
+                      type="number"
+                      className="mt-2"
+                      value={form.charges.freight.gstRate}
+                      disabled={!isEditable}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          charges: { ...prev.charges, freight: { ...prev.charges.freight, gstRate: Number(e.target.value) || 0 } },
+                        }))
+                      }
+                    />
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">Tax rate hidden for this mode.</p>
+                  )}
                 </div>
                 <div className="rounded-md border p-3">
                   <p className="mb-2 text-sm font-medium">Packing</p>
@@ -1284,18 +1333,22 @@ export default function InvoiceBuilder() {
                       }))
                     }
                   />
-                  <Input
-                    type="number"
-                    className="mt-2"
-                    value={form.charges.packing.gstRate}
-                    disabled={!isEditable}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        charges: { ...prev.charges, packing: { ...prev.charges.packing, gstRate: Number(e.target.value) || 0 } },
-                      }))
-                    }
-                  />
+                  {businessMode.showTaxColumns ? (
+                    <Input
+                      type="number"
+                      className="mt-2"
+                      value={form.charges.packing.gstRate}
+                      disabled={!isEditable}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          charges: { ...prev.charges, packing: { ...prev.charges.packing, gstRate: Number(e.target.value) || 0 } },
+                        }))
+                      }
+                    />
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">Tax rate hidden for this mode.</p>
+                  )}
                 </div>
                 <div className="rounded-md border p-3">
                   <p className="mb-2 text-sm font-medium">Other</p>
@@ -1310,19 +1363,28 @@ export default function InvoiceBuilder() {
                       }))
                     }
                   />
-                  <Input
-                    type="number"
-                    className="mt-2"
-                    value={form.charges.other.gstRate}
-                    disabled={!isEditable}
-                    onChange={(e) =>
-                      setForm((prev) => ({
-                        ...prev,
-                        charges: { ...prev.charges, other: { ...prev.charges.other, gstRate: Number(e.target.value) || 0 } },
-                      }))
-                    }
-                  />
+                  {businessMode.showTaxColumns ? (
+                    <Input
+                      type="number"
+                      className="mt-2"
+                      value={form.charges.other.gstRate}
+                      disabled={!isEditable}
+                      onChange={(e) =>
+                        setForm((prev) => ({
+                          ...prev,
+                          charges: { ...prev.charges, other: { ...prev.charges.other, gstRate: Number(e.target.value) || 0 } },
+                        }))
+                      }
+                    />
+                  ) : (
+                    <p className="mt-2 text-xs text-muted-foreground">Tax rate hidden for this mode.</p>
+                  )}
                 </div>
+                {!businessMode.showTaxColumns ? (
+                  <p className="md:col-span-2 xl:col-span-3 rounded-md border border-dashed bg-slate-50 p-3 text-xs text-muted-foreground">
+                    Additional charges are treated as simple charges with no GST breakdown in this mode.
+                  </p>
+                ) : null}
               </CardContent>
             ) : null}
           </Card>
@@ -1481,7 +1543,11 @@ export default function InvoiceBuilder() {
                 <Badge variant="secondary">{supplyType}</Badge>
               </div>
               <p className="text-xs text-muted-foreground">
-                {isInterState ? "Inter-State: IGST applicable" : "Intra-State: CGST + SGST applicable"}
+                {businessMode.showTaxColumns
+                  ? isInterState
+                    ? "Inter-State: IGST applicable"
+                    : "Intra-State: CGST + SGST applicable"
+                  : businessMode.title}
               </p>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -1494,35 +1560,46 @@ export default function InvoiceBuilder() {
                 <span>- {MONEY.format(discountTotal)}</span>
               </div>
               <div className="flex justify-between font-medium">
-                <span>Taxable Value</span>
+                <span>{businessMode.showTaxColumns ? "Taxable Value" : "Bill Total"}</span>
                 <span>{MONEY.format(totals.taxableValue)}</span>
               </div>
-              <div className="space-y-1 rounded-md border p-2">
-                {taxByRate.map(([rate, value]) =>
-                  isInterState ? (
-                    <div key={`igst-${rate}`} className="flex justify-between text-xs">
-                      <span>IGST @ {rate}%</span>
-                      <span>{MONEY.format(value.igst)}</span>
-                    </div>
-                  ) : (
-                    <div key={`cgst-sgst-${rate}`} className="space-y-1 text-xs">
-                      <div className="flex justify-between">
-                        <span>CGST @ {rate / 2}%</span>
-                        <span>{MONEY.format(value.cgst)}</span>
+              {businessMode.showTaxColumns ? (
+                <div className="space-y-1 rounded-md border p-2">
+                  {taxByRate.map(([rate, value]) =>
+                    isInterState ? (
+                      <div key={`igst-${rate}`} className="flex justify-between text-xs">
+                        <span>IGST @ {rate}%</span>
+                        <span>{MONEY.format(value.igst)}</span>
                       </div>
-                      <div className="flex justify-between">
-                        <span>SGST @ {rate / 2}%</span>
-                        <span>{MONEY.format(value.sgst)}</span>
+                    ) : (
+                      <div key={`cgst-sgst-${rate}`} className="space-y-1 text-xs">
+                        <div className="flex justify-between">
+                          <span>CGST @ {rate / 2}%</span>
+                          <span>{MONEY.format(value.cgst)}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>SGST @ {rate / 2}%</span>
+                          <span>{MONEY.format(value.sgst)}</span>
+                        </div>
                       </div>
-                    </div>
-                  ),
-                )}
-              </div>
+                    ),
+                  )}
+                </div>
+              ) : (
+                <p className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
+                  This document stays GST-free, so there is no tax breakdown to show.
+                </p>
+              )}
               <div className="flex justify-between border-t pt-2 text-lg font-semibold">
                 <span>Grand Total</span>
                 <span>{MONEY.format(totals.grandTotal)}</span>
               </div>
               <p className="rounded-md bg-slate-50 px-3 py-2 text-xs text-muted-foreground">{amountInWords(totals.grandTotal)}</p>
+              {!businessMode.showTaxColumns ? (
+                <p className="rounded-md border border-dashed bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                  Prices are shown without GST columns for this business profile.
+                </p>
+              ) : null}
               <div className="grid grid-cols-1 gap-2 pt-2">
                 <Button onClick={() => saveInvoice(false)} disabled={!isEditable}>
                   Save Draft

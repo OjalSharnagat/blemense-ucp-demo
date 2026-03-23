@@ -9,7 +9,7 @@ import type {
   Payment,
 } from "../data/billing";
 import {
-  computeInvoiceTotals,
+  computeInvoiceTotalsForProfile,
   computeIsInterState,
   generateInvoiceNumber,
   getCurrentFinancialYear,
@@ -51,10 +51,50 @@ type BillingStoreValue = {
 const BillingStoreContext = createContext<BillingStoreValue | null>(null);
 
 const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
+  gstRegistrationStatus: "UNREGISTERED",
+  gstin: "",
+  legalName: "Your Business Name",
+  tradeName: "My Store",
+  businessType: "PROPRIETORSHIP",
+  businessScale: "SMALL",
+  businessCategory: "BOTH",
+  priceDisplayMode: "INCLUSIVE",
+  financialYearStartMonth: "APRIL",
+  address: "",
+  addressLine2: "",
+  city: "",
+  state: "Maharashtra",
+  stateCode: "27",
+  pincode: "",
+  pan: "",
+  compositionScheme: false,
+  registrationType: undefined,
+  email: "",
+  phone: "",
+  bankName: "",
+  accountNumber: "",
+  ifsc: "",
+  branch: "",
+  accountType: "CURRENT",
+  upiId: "",
+  defaultPaymentTermDays: 15,
+  defaultNotes: "",
+  defaultTerms: "",
+  invoicePrefix: "INV",
+  startingSequenceNumber: 1,
+  setupComplete: false,
+  signatureUrl: "",
+};
+
+const SEED_BUSINESS_PROFILE: BusinessProfile = {
+  gstRegistrationStatus: "REGISTERED",
   gstin: "27AAECS1234F1Z5",
   legalName: "Sampurna Living Private Limited",
   tradeName: "Sampurna Home",
   businessType: "PRIVATE_LIMITED",
+  businessScale: "ESTABLISHED",
+  businessCategory: "BOTH",
+  priceDisplayMode: "EXCLUSIVE",
   financialYearStartMonth: "APRIL",
   address: "Unit 14, Saki Vihar Road, Andheri East",
   addressLine2: "Near Powai Lake",
@@ -78,6 +118,7 @@ const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
   defaultTerms: "Payment due within 15 days from issue date.",
   invoicePrefix: "INV",
   startingSequenceNumber: 1,
+  setupComplete: true,
   signatureUrl: "https://example.com/signatures/sampurna-authorized-signatory.png",
 };
 
@@ -232,10 +273,12 @@ const buildInvoice = (args: {
   notes?: string;
   linkedInvoiceId?: string;
   amountPaid?: number;
+  seller?: BusinessProfile;
 }): Invoice => {
   const financialYear = getCurrentFinancialYear(args.issueDate);
-  const isInterState = computeIsInterState(DEFAULT_BUSINESS_PROFILE.stateCode, args.buyer.stateCode);
-  const taxBreakdown = computeInvoiceTotals(args.lineItems, isInterState);
+  const seller = args.seller ?? SEED_BUSINESS_PROFILE;
+  const isInterState = computeIsInterState(seller.stateCode, args.buyer.stateCode);
+  const taxBreakdown = computeInvoiceTotalsForProfile(args.lineItems, isInterState, seller);
   const amountPaid = Math.min(args.amountPaid ?? 0, taxBreakdown.grandTotal);
   const status =
     args.status === "FINALIZED" && amountPaid > 0 ? toPaymentStatus(amountPaid, taxBreakdown.grandTotal) : args.status;
@@ -248,7 +291,7 @@ const buildInvoice = (args: {
     issueDate: args.issueDate,
     dueDate: args.dueDate,
     supplyDate: args.supplyDate,
-    seller: DEFAULT_BUSINESS_PROFILE,
+    seller,
     buyer: args.buyer,
     lineItems: args.lineItems,
     taxBreakdown,
@@ -608,7 +651,7 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
         }));
 
         const isInterState = computeIsInterState(invoice.seller.stateCode, invoice.buyer.stateCode);
-        const taxBreakdown = computeInvoiceTotals(invoice.lineItems, isInterState);
+        const taxBreakdown = computeInvoiceTotalsForProfile(invoice.lineItems, isInterState, invoice.seller);
         const created: Invoice = {
           ...invoice,
           id,
@@ -634,7 +677,7 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
             if (existing.status !== "DRAFT") return existing;
 
             const isInterState = computeIsInterState(invoice.seller.stateCode, invoice.buyer.stateCode);
-            const taxBreakdown = computeInvoiceTotals(invoice.lineItems, isInterState);
+            const taxBreakdown = computeInvoiceTotalsForProfile(invoice.lineItems, isInterState, invoice.seller);
             return {
               ...invoice,
               isInterState,
@@ -714,20 +757,6 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
       },
       updateBusinessProfile: (profile) => {
         setBusinessProfile(profile);
-        setInvoices((prev) =>
-          prev.map((invoice) => {
-            const isInterState = computeIsInterState(profile.stateCode, invoice.buyer.stateCode);
-            const taxBreakdown = computeInvoiceTotals(invoice.lineItems, isInterState);
-            return {
-              ...invoice,
-              seller: profile,
-              isInterState,
-              taxBreakdown,
-              balanceDue: Math.max(0, Number((taxBreakdown.grandTotal - invoice.amountPaid).toFixed(2))),
-              updatedAt: new Date().toISOString(),
-            };
-          }),
-        );
       },
     }),
     [invoices, parties, businessProfile, payments, invoiceSequences],

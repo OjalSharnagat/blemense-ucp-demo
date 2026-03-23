@@ -9,6 +9,8 @@ export interface Product {
   sku: string
   description: string
   createdAt: string
+  hsn?: string
+  gstRate?: number
 }
 
 export const products: Product[] = [

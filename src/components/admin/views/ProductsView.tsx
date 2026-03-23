@@ -23,6 +23,8 @@ type ProductFormValues = {
   stock: number
   status: 'active' | 'draft' | 'archived'
   description: string
+  hsn: string
+  gstRate: number
 }
 
 function toStatusBadge(status: Product['status']): 'default' | 'secondary' | 'warning' {
@@ -130,7 +132,9 @@ export default function ProductsView() {
         image: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=80&h=80&fit=crop',
         images: ['https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=80&h=80&fit=crop'],
         variants: [],
-        featured: false
+        featured: false,
+        hsn: values.hsn.trim().toUpperCase(),
+        gstRate: Math.max(0, Number(values.gstRate) || 0)
       })
     }
 

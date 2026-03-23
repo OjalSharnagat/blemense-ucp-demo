@@ -13,7 +13,7 @@ const statusClass: Record<InvoiceStatus, string> = {
 export default function InvoiceStatusBadge({ status }: { status: InvoiceStatus }) {
   return (
     <Badge variant="secondary" className={statusClass[status]}>
-      {status.replaceAll("_", " ")}
+      {status.replace(/_/g, " ")}
     </Badge>
   );
 }

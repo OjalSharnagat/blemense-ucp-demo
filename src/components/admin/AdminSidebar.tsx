@@ -1,5 +1,7 @@
 import { LayoutDashboard, Package, ShoppingCart, Users, Settings, Store, Receipt, FileText, Landmark, Building2 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useBillingStore } from '@/lib/billingStore'
+import { getBusinessModeConfig } from '@/lib/businessMode'
 import { cn } from '../../lib/utils'
 import { Avatar, AvatarFallback } from '../ui/avatar'
 
@@ -13,6 +15,9 @@ export default function AdminSidebar({
   mobileOpen: boolean
   onClose: () => void
 }) {
+  const { businessProfile } = useBillingStore()
+  const businessMode = getBusinessModeConfig(businessProfile)
+
   return (
     <>
       <div
@@ -108,16 +113,18 @@ export default function AdminSidebar({
                 <Receipt className="h-4 w-4" />
                 Billing
               </NavLink>
-              <NavLink
-                to="/admin/gst-returns"
-                className={({ isActive }) =>
-                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
-                }
-                onClick={onClose}
-              >
-                <FileText className="h-4 w-4" />
-                GST Returns
-              </NavLink>
+              {businessMode.showGstReturns ? (
+                <NavLink
+                  to="/admin/gst-returns"
+                  className={({ isActive }) =>
+                    cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                  }
+                  onClick={onClose}
+                >
+                  <FileText className="h-4 w-4" />
+                  GST Returns
+                </NavLink>
+              ) : null}
               <NavLink
                 to="/admin/payments"
                 className={({ isActive }) =>
@@ -152,7 +159,7 @@ export default function AdminSidebar({
                 onClick={onClose}
               >
                 <Building2 className="h-4 w-4" />
-                Business & GST
+                Business Setup
               </NavLink>
             </div>
           </div>

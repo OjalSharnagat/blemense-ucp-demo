@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, Copy, Download, Share2 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
+import { getBusinessModeConfig } from "@/lib/businessMode";
 import { computeLineItemTax, amountInWords } from "@/lib/gst";
 import { copyCurrentUrl, printCurrentPage } from "@/lib/pdfExport";
 import { useBillingStore } from "@/lib/billingStore";
@@ -17,12 +18,20 @@ const INVOICE_TITLES = {
   DEBIT_NOTE: "DEBIT NOTE",
 } as const;
 
+function getDocumentTitle(type: keyof typeof INVOICE_TITLES, mode: ReturnType<typeof getBusinessModeConfig>): string {
+  if (type === "CREDIT_NOTE" || type === "DEBIT_NOTE" || type === "PROFORMA") {
+    return INVOICE_TITLES[type];
+  }
+  return mode.title.toUpperCase();
+}
+
 export default function InvoicePreview() {
   const { id } = useParams();
   const { invoices } = useBillingStore();
   const [copied, setCopied] = useState(false);
 
   const invoice = invoices.find((item) => item.id === id);
+  const businessMode = invoice ? getBusinessModeConfig(invoice.seller) : null;
   const linkedInvoice = useMemo(
     () => (invoice?.linkedInvoiceId ? invoices.find((item) => item.id === invoice.linkedInvoiceId) : undefined),
     [invoice?.linkedInvoiceId, invoices],
@@ -42,7 +51,9 @@ export default function InvoicePreview() {
   const lineRows = invoice.lineItems.map((item) => {
     const tax = computeLineItemTax(item, invoice.isInterState);
     const gross = item.quantity * item.unitPrice;
-    const total = tax.taxableValue + tax.cgstAmount + tax.sgstAmount + tax.igstAmount;
+    const total = businessMode?.showTaxColumns
+      ? tax.taxableValue + tax.cgstAmount + tax.sgstAmount + tax.igstAmount
+      : tax.taxableValue;
     return { item, tax, gross, total };
   });
 
@@ -127,8 +138,10 @@ export default function InvoicePreview() {
 
           <div className="mb-4 flex items-start justify-between gap-4 border-b pb-4">
             <div>
-              <h1 className="text-2xl font-extrabold tracking-wide">{INVOICE_TITLES[invoice.type]}</h1>
-              <p className="mt-1 text-xs text-slate-600">This document is generated under GST compliant format.</p>
+              <h1 className="text-2xl font-extrabold tracking-wide">
+                {businessMode ? getDocumentTitle(invoice.type, businessMode) : INVOICE_TITLES[invoice.type]}
+              </h1>
+              <p className="mt-1 text-xs text-slate-600">{businessMode?.subtitle ?? "This document is generated under GST compliant format."}</p>
             </div>
             <div className="text-right text-xs">
               <p className="font-semibold">Invoice No: {invoice.invoiceNumber}</p>
@@ -153,7 +166,7 @@ export default function InvoicePreview() {
               <p>
                 {invoice.seller.city}, {invoice.seller.state} - {invoice.seller.pincode}
               </p>
-              <p>GSTIN: {invoice.seller.gstin}</p>
+              {businessMode?.showGstFields ? <p>GSTIN: {invoice.seller.gstin || "Not set"}</p> : <p>GST not registered</p>}
               <p>State: {invoice.seller.state}</p>
               <p>State Code: {invoice.seller.stateCode}</p>
             </div>
@@ -165,7 +178,7 @@ export default function InvoicePreview() {
               <p>
                 {invoice.buyer.city}, {invoice.buyer.state} - {invoice.buyer.pincode}
               </p>
-              <p>GSTIN: {invoice.buyer.gstin || "Unregistered"}</p>
+              {businessMode?.showGstFields ? <p>GSTIN: {invoice.buyer.gstin || "Unregistered"}</p> : <p>Simple bill mode</p>}
               <p>State: {invoice.buyer.state}</p>
               <p>State Code: {invoice.buyer.stateCode}</p>
               <p>Place of Supply: {invoice.placeOfSupply}</p>
@@ -177,20 +190,22 @@ export default function InvoicePreview() {
               <tr className="bg-slate-100">
                 <th className="border px-2 py-1 text-left">#</th>
                 <th className="border px-2 py-1 text-left">Description</th>
-                <th className="border px-2 py-1 text-left">HSN/SAC</th>
                 <th className="border px-2 py-1 text-right">Qty</th>
                 <th className="border px-2 py-1 text-left">Unit</th>
                 <th className="border px-2 py-1 text-right">Rate</th>
-                <th className="border px-2 py-1 text-right">Taxable Value</th>
-                <th className="border px-2 py-1 text-right">GST %</th>
-                {invoice.isInterState ? (
-                  <th className="border px-2 py-1 text-right">IGST Amt</th>
-                ) : (
-                  <>
-                    <th className="border px-2 py-1 text-right">CGST Amt</th>
-                    <th className="border px-2 py-1 text-right">SGST Amt</th>
-                  </>
-                )}
+                {businessMode?.showHsnSac ? <th className="border px-2 py-1 text-left">HSN/SAC</th> : null}
+                {businessMode?.showTaxColumns ? <th className="border px-2 py-1 text-right">Taxable Value</th> : null}
+                {businessMode?.showTaxColumns ? <th className="border px-2 py-1 text-right">GST %</th> : null}
+                {businessMode?.showTaxColumns ? (
+                  invoice.isInterState ? (
+                    <th className="border px-2 py-1 text-right">IGST Amt</th>
+                  ) : (
+                    <>
+                      <th className="border px-2 py-1 text-right">CGST Amt</th>
+                      <th className="border px-2 py-1 text-right">SGST Amt</th>
+                    </>
+                  )
+                ) : null}
                 <th className="border px-2 py-1 text-right">Line Total</th>
               </tr>
             </thead>
@@ -199,20 +214,22 @@ export default function InvoicePreview() {
                 <tr key={row.item.id}>
                   <td className="border px-2 py-1">{idx + 1}</td>
                   <td className="border px-2 py-1">{row.item.description}</td>
-                  <td className="border px-2 py-1">{row.item.hsn || "-"}</td>
                   <td className="border px-2 py-1 text-right">{row.item.quantity}</td>
                   <td className="border px-2 py-1">{row.item.unit}</td>
                   <td className="border px-2 py-1 text-right">{MONEY.format(row.item.unitPrice)}</td>
-                  <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.taxableValue)}</td>
-                  <td className="border px-2 py-1 text-right">{row.item.gstRate}%</td>
-                  {invoice.isInterState ? (
-                    <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.igstAmount)}</td>
-                  ) : (
-                    <>
-                      <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.cgstAmount)}</td>
-                      <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.sgstAmount)}</td>
-                    </>
-                  )}
+                  {businessMode?.showHsnSac ? <td className="border px-2 py-1">{row.item.hsn || "-"}</td> : null}
+                  {businessMode?.showTaxColumns ? <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.taxableValue)}</td> : null}
+                  {businessMode?.showTaxColumns ? <td className="border px-2 py-1 text-right">{row.item.gstRate}%</td> : null}
+                  {businessMode?.showTaxColumns ? (
+                    invoice.isInterState ? (
+                      <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.igstAmount)}</td>
+                    ) : (
+                      <>
+                        <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.cgstAmount)}</td>
+                        <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.sgstAmount)}</td>
+                      </>
+                    )
+                  ) : null}
                   <td className="border px-2 py-1 text-right">{MONEY.format(row.total)}</td>
                 </tr>
               ))}
@@ -221,25 +238,33 @@ export default function InvoicePreview() {
 
           <div className="mb-4 ml-auto w-full max-w-[360px] space-y-1 rounded-md border p-3 text-[11px]">
             <div className="flex justify-between">
-              <span>Total Taxable Value</span>
+              <span>{businessMode?.showTaxColumns ? "Total Taxable Value" : "Bill Value"}</span>
               <span>{MONEY.format(invoice.taxBreakdown.taxableValue)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Total CGST</span>
-              <span>{MONEY.format(invoice.taxBreakdown.cgstAmount)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Total SGST</span>
-              <span>{MONEY.format(invoice.taxBreakdown.sgstAmount)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>Total IGST</span>
-              <span>{MONEY.format(invoice.taxBreakdown.igstAmount)}</span>
-            </div>
-            <div className="flex justify-between border-t pt-1 font-semibold">
-              <span>Total Tax</span>
-              <span>{MONEY.format(invoice.taxBreakdown.totalTax)}</span>
-            </div>
+            {businessMode?.showTaxColumns ? (
+              <>
+                <div className="flex justify-between">
+                  <span>Total CGST</span>
+                  <span>{MONEY.format(invoice.taxBreakdown.cgstAmount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total SGST</span>
+                  <span>{MONEY.format(invoice.taxBreakdown.sgstAmount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total IGST</span>
+                  <span>{MONEY.format(invoice.taxBreakdown.igstAmount)}</span>
+                </div>
+                <div className="flex justify-between border-t pt-1 font-semibold">
+                  <span>Total Tax</span>
+                  <span>{MONEY.format(invoice.taxBreakdown.totalTax)}</span>
+                </div>
+              </>
+            ) : (
+              <p className="rounded-md border border-dashed bg-slate-50 px-3 py-2 text-[10px] text-slate-600">
+                No GST is collected in this document mode.
+              </p>
+            )}
             <div className="flex justify-between text-base font-bold">
               <span>Grand Total</span>
               <span>{MONEY.format(invoice.taxBreakdown.grandTotal)}</span>
@@ -249,6 +274,11 @@ export default function InvoicePreview() {
           <div className="mb-4 rounded-md bg-slate-50 px-3 py-2 text-[11px]">
             Amount in Words: <span className="font-semibold">{amountInWords(invoice.taxBreakdown.grandTotal)}</span>
           </div>
+          {businessMode?.mode === "COMPOSITION" ? (
+            <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+              Composition taxable person, not eligible to collect tax on supplies.
+            </div>
+          ) : null}
 
           <div className="mb-4 grid grid-cols-2 gap-4 text-[11px]">
             <div className="rounded-md border p-3">

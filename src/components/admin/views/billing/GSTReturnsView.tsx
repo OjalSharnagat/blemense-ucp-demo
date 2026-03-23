@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronUp, Download } from "lucide-react";
 import type { Invoice, LineItem } from "@/data/billing";
+import { getBusinessModeConfig } from "@/lib/businessMode";
 import { useBillingStore } from "@/lib/billingStore";
 import { computeLineItemTax } from "@/lib/gst";
 import { downloadJsonFile } from "@/lib/pdfExport";
+import { Link } from "react-router-dom";
 import { Badge } from "../../../ui/badge";
 import { Button } from "../../../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../ui/card";
@@ -33,6 +35,7 @@ const round2 = (num: number): number => Math.round((num + Number.EPSILON) * 100)
 const isInvoiceEligible = (invoice: Invoice): boolean => {
   if (invoice.status === "DRAFT" || invoice.status === "CANCELLED") return false;
   if (invoice.type === "PROFORMA") return false;
+  if (invoice.seller.gstRegistrationStatus !== "REGISTERED" || invoice.seller.compositionScheme) return false;
   return true;
 };
 
@@ -66,6 +69,28 @@ const getLineSign = (type: Invoice["type"]): number => (type === "CREDIT_NOTE" ?
 
 export default function GSTReturnsView() {
   const { invoices, businessProfile } = useBillingStore();
+  const businessMode = getBusinessModeConfig(businessProfile);
+
+  if (!businessMode.showGstReturns) {
+    return (
+      <div className="dash-view space-y-4">
+        <h1 className="text-2xl font-semibold tracking-tight">GST Returns</h1>
+        <Card>
+          <CardContent className="space-y-3 py-6">
+            <p className="text-sm text-muted-foreground">
+              GST returns are hidden because this business profile is not GST registered.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Turn on GST registration in Business Setup when you are ready for returns, tax invoices, and filing workflows.
+            </p>
+            <Button asChild>
+              <Link to="/admin/settings/business-gst">Open Business Setup</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const availableYears = useMemo(() => {
     const set = new Set<number>();
@@ -370,7 +395,7 @@ export default function GSTReturnsView() {
       if (!inv) {
         inv = {
           inum: row.invoiceNo,
-          idt: parseDate(row.date).toLocaleDateString("en-GB").replaceAll("/", "-"),
+          idt: parseDate(row.date).toLocaleDateString("en-GB").split("/").join("-"),
           val: round2(row.value),
           pos: row.placeOfSupply,
           rchrg: row.reverseCharge as "Y" | "N",
@@ -451,13 +476,13 @@ export default function GSTReturnsView() {
       if (!note) {
         note = {
           nt_num: row.noteNo,
-          nt_dt: parseDate(row.noteDate).toLocaleDateString("en-GB").replaceAll("/", "-"),
+          nt_dt: parseDate(row.noteDate).toLocaleDateString("en-GB").split("/").join("-"),
           ntty: row.noteType,
           rsn: "Sales Return / Adjustment",
           p_gst: "Y",
           inum: row.linkedInvoiceNo,
           idt: row.linkedInvoiceDate
-            ? parseDate(row.linkedInvoiceDate).toLocaleDateString("en-GB").replaceAll("/", "-")
+            ? parseDate(row.linkedInvoiceDate).toLocaleDateString("en-GB").split("/").join("-")
             : "",
           val: round2(row.value),
           itms: [],
@@ -562,6 +587,15 @@ export default function GSTReturnsView() {
           Period: {MONTHS[selectedMonth - 1]} {selectedYear}
         </Badge>
       </div>
+
+      {businessMode.mode === "COMPOSITION" ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="py-4 text-sm text-amber-900">
+            Composition dealers do not use the standard GSTR-1 / GSTR-3B filing flow. This page stays available as a historical
+            report only.
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card>
         <CardHeader>
