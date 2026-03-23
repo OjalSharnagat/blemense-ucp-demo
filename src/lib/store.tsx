@@ -31,9 +31,11 @@ const INITIAL_ORDERS: Order[] = mockOrders.map((order) => {
     date: order.date,
     status: order.status,
     total: order.total,
+    customerId: order.customerId,
     customerName: order.customer,
     customerEmail: order.email,
     email: order.email,
+    invoiceId: order.invoiceId,
     items: order.items.map((name) => ({
       productId: `prd-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
       name,
@@ -67,12 +69,28 @@ export function AdminStoreProvider({ children }: PropsWithChildren) {
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS)
   const [orders, setOrders] = useState<Order[]>(INITIAL_ORDERS)
   const [customers, setCustomers] = useState<Customer[]>(INITIAL_CUSTOMERS)
+  const derivedCustomers = useMemo(
+    () =>
+      customers.map((customer) => {
+        const relatedOrders = orders.filter((order) => order.customerId === customer.id)
+        const totalOrders = relatedOrders.length
+        const totalSpent = relatedOrders.reduce((sum, order) => sum + order.total, 0)
+
+        return {
+          ...customer,
+          totalOrders,
+          totalSpent,
+          orderIds: relatedOrders.map((order) => order.id),
+        }
+      }),
+    [customers, orders],
+  )
 
   const value = useMemo<AdminStoreValue>(
     () => ({
       products,
       orders,
-      customers,
+      customers: derivedCustomers,
       addProduct: (product) => {
         setProducts((prev) => [product, ...prev])
       },
@@ -104,7 +122,7 @@ export function AdminStoreProvider({ children }: PropsWithChildren) {
         setCustomers((prev) => prev.filter((item) => item.id !== customerId))
       }
     }),
-    [products, orders, customers]
+    [products, orders, derivedCustomers]
   )
 
   return <AdminStoreContext.Provider value={value}>{children}</AdminStoreContext.Provider>

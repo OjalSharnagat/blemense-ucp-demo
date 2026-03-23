@@ -89,6 +89,8 @@ export interface TaxBreakdown {
 export interface Payment {
   id: string;
   invoiceId: string;
+  customerId?: string;
+  orderId?: string;
   date: string;
   amount: number;
   mode: "CASH" | "BANK_TRANSFER" | "UPI" | "CHEQUE" | "CARD";
@@ -123,6 +125,8 @@ export interface Invoice {
   supplyDate: string;
   seller: BusinessProfile;
   buyer: Party;
+  customerId?: string;
+  orderId?: string;
   shippingAddress?: ShippingAddress;
   lineItems: LineItem[];
   taxBreakdown: TaxBreakdown;

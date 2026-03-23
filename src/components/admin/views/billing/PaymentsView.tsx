@@ -10,6 +10,8 @@ import {
   ScrollText,
   Smartphone,
 } from "lucide-react";
+import { Link } from "react-router-dom";
+import { useAdminStore } from "@/lib/store";
 import { useBillingStore } from "@/lib/billingStore";
 import { uid } from "@/utils";
 import { Button } from "../../../ui/button";
@@ -31,6 +33,7 @@ const paymentModeMeta: Record<PaymentMode, { label: string; icon: typeof Banknot
 
 export default function PaymentsView() {
   const { invoices, payments, addPayment, getInvoicePaymentMeta } = useBillingStore();
+  const { customers } = useAdminStore();
 
   const [activeTab, setActiveTab] = useState<PaymentTab>("ALL");
   const [expandedInvoiceId, setExpandedInvoiceId] = useState<string | null>(null);
@@ -57,6 +60,11 @@ export default function PaymentsView() {
       .filter(({ invoice }) => invoice.status !== "CANCELLED")
       .sort((a, b) => new Date(b.invoice.issueDate).getTime() - new Date(a.invoice.issueDate).getTime());
   }, [invoices, getInvoicePaymentMeta]);
+
+  const customerById = useMemo(
+    () => new Map(customers.map((customer) => [customer.id, customer])),
+    [customers],
+  );
 
   const filteredRows = useMemo(() => {
     if (activeTab === "OVERDUE") return rows.filter((row) => row.isOverdue);
@@ -164,6 +172,7 @@ export default function PaymentsView() {
             <TableRow>
               <TableHead>Invoice No.</TableHead>
               <TableHead>Customer</TableHead>
+              <TableHead>Order</TableHead>
               <TableHead>Invoice Date</TableHead>
               <TableHead>Due Date</TableHead>
               <TableHead className="text-right">Invoice Amount</TableHead>
@@ -182,8 +191,36 @@ export default function PaymentsView() {
                     className="cursor-pointer"
                     onClick={() => setExpandedInvoiceId((prev) => (prev === invoice.id ? null : invoice.id))}
                   >
-                    <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
-                    <TableCell>{invoice.buyer.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <Link className="text-primary hover:underline" to={`/admin/billing/${invoice.id}`} onClick={(event) => event.stopPropagation()}>
+                        {invoice.invoiceNumber}
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {invoice.customerId ? (
+                          <Link
+                            className="font-medium text-primary hover:underline"
+                            to={`/admin/billing?customer=${invoice.customerId}`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            {customerById.get(invoice.customerId || "")?.name || invoice.buyer.name}
+                          </Link>
+                        ) : (
+                          <p className="font-medium">{invoice.buyer.name}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">{invoice.customerId || "Customer ref missing"}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {invoice.orderId ? (
+                        <Link className="font-medium text-primary hover:underline" to={`/admin/orders?order=${invoice.orderId}`} onClick={(event) => event.stopPropagation()}>
+                          {invoice.orderId}
+                        </Link>
+                      ) : (
+                        "Not linked"
+                      )}
+                    </TableCell>
                     <TableCell>{new Date(invoice.issueDate).toLocaleDateString("en-IN")}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -214,7 +251,7 @@ export default function PaymentsView() {
                   </TableRow>
                   {expanded ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="bg-slate-50">
+                      <TableCell colSpan={10} className="bg-slate-50">
                         <div className="flex items-center justify-between pb-2">
                           <p className="text-sm font-medium">Payment history</p>
                           <Button
@@ -260,8 +297,8 @@ export default function PaymentsView() {
               );
             })}
             {filteredRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
+                      <TableRow>
+                <TableCell colSpan={10} className="py-10 text-center text-sm text-muted-foreground">
                   No invoices in this tab.
                 </TableCell>
               </TableRow>

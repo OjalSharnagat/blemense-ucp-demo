@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CalendarDays, ChevronDown, ChevronUp, Eye, Mail, MapPin, PackageSearch, User } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { fmt } from '../../../utils'
 import { useAdminStore } from '@/lib/store'
+import { useBillingStore } from '@/lib/billingStore'
 import { Badge } from '../../ui/badge'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
@@ -20,6 +22,7 @@ type NormalizedItem = {
 
 type NormalizedOrder = {
   id: string
+  customerId?: string
   customerName: string
   customerEmail: string
   date: string
@@ -27,6 +30,8 @@ type NormalizedOrder = {
   status: OrderStatus
   address: string
   items: NormalizedItem[]
+  invoiceId?: string
+  invoiceNumber?: string
 }
 
 const STATUS_FLOW: Array<Exclude<OrderStatus, 'cancelled'>> = [
@@ -59,6 +64,8 @@ function toTitle(status: string): string {
 
 export default function OrdersView() {
   const { orders, updateOrderStatus } = useAdminStore()
+  const { invoices } = useBillingStore()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'all' | OrderStatus>('all')
   const [dateSort, setDateSort] = useState<'newest' | 'oldest'>('newest')
@@ -75,19 +82,22 @@ export default function OrdersView() {
   const normalizedOrders = useMemo<NormalizedOrder[]>(() => {
     return orders.map((order) => ({
       id: order.id,
+      customerId: order.customerId,
       customerName: order.customerName || 'Guest User',
       customerEmail: order.customerEmail || order.email || 'No email',
       date: order.createdAt || order.date || new Date(0).toISOString(),
       total: order.total,
       status: normalizeStatus(order.status),
       address: 'Address not provided',
+      invoiceId: invoices.find((invoice) => invoice.orderId === order.id || (order.customerId && invoice.customerId === order.customerId))?.id ?? order.invoiceId,
+      invoiceNumber: invoices.find((invoice) => invoice.orderId === order.id || (order.customerId && invoice.customerId === order.customerId))?.invoiceNumber,
       items: order.items.map((item) => ({
         name: item.name,
         qty: item.qty,
         unitPrice: item.unitPrice
       }))
     }))
-  }, [orders])
+  }, [orders, invoices])
 
   const filteredOrders = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -157,6 +167,35 @@ export default function OrdersView() {
   function SortIndicator({ field }: { field: 'id' | 'date' | 'total' }) {
     if (sortField !== field) return null
     return sortDir === 'asc' ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />
+  }
+
+  const selectedInvoice = useMemo(
+    () =>
+      selectedOrder?.invoiceId
+        ? invoices.find((invoice) => invoice.id === selectedOrder.invoiceId)
+        : selectedOrder?.customerId
+          ? invoices.find((invoice) => invoice.customerId === selectedOrder.customerId || invoice.orderId === selectedOrder.id)
+          : undefined,
+    [invoices, selectedOrder],
+  )
+
+  const orderParam = searchParams.get('order') || ''
+
+  useEffect(() => {
+    if (!orderParam) return
+    const matchedOrder = normalizedOrders.find((order) => order.id === orderParam)
+    if (matchedOrder) {
+      setSelectedOrder(matchedOrder)
+    }
+  }, [orderParam, normalizedOrders])
+
+  const closeSelectedOrder = () => {
+    if (orderParam) {
+      const next = new URLSearchParams(searchParams)
+      next.delete('order')
+      setSearchParams(next, { replace: true })
+    }
+    setSelectedOrder(null)
   }
 
   return (
@@ -234,6 +273,7 @@ export default function OrdersView() {
                   </button>
                 </TableHead>
                 <TableHead>Items</TableHead>
+                <TableHead>Linked Bill</TableHead>
                 <TableHead>
                   <button
                     type="button"
@@ -258,6 +298,15 @@ export default function OrdersView() {
                   </TableCell>
                   <TableCell>{new Date(order.date).toLocaleDateString('en-IN')}</TableCell>
                   <TableCell>{order.items.length}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {order.invoiceId ? (
+                      <Link className="font-medium text-primary hover:underline" to={`/admin/billing/${order.invoiceId}`}>
+                        {order.invoiceNumber || order.invoiceId}
+                      </Link>
+                    ) : (
+                      'Unlinked'
+                    )}
+                  </TableCell>
                   <TableCell>{fmt.format(order.total)}</TableCell>
                   <TableCell>
                     <Badge variant="secondary" className={statusClassName(order.status)}>
@@ -280,7 +329,7 @@ export default function OrdersView() {
               ))}
               {filteredOrders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     <div className="mx-auto flex max-w-xs flex-col items-center gap-2 py-6">
                       <PackageSearch className="h-10 w-10 text-muted-foreground/60" />
                       <p className="font-medium text-foreground">No orders found.</p>
@@ -298,7 +347,7 @@ export default function OrdersView() {
         className={`fixed inset-0 z-40 bg-black/30 transition-opacity ${
           selectedOrder ? 'pointer-events-auto opacity-100' : 'pointer-events-none opacity-0'
         }`}
-        onClick={() => setSelectedOrder(null)}
+        onClick={closeSelectedOrder}
         aria-hidden="true"
       />
 
@@ -316,7 +365,7 @@ export default function OrdersView() {
                   <p className="text-xs uppercase tracking-wide text-muted-foreground">Order detail</p>
                   <h2 className="font-mono text-sm font-semibold">{selectedOrder.id}</h2>
                 </div>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedOrder(null)}>
+                <Button variant="ghost" size="sm" onClick={closeSelectedOrder}>
                   Close
                 </Button>
               </div>
@@ -328,8 +377,54 @@ export default function OrdersView() {
                 <div className="space-y-2 rounded-lg border p-3 text-sm">
                   <p className="flex items-center gap-2"><User className="h-4 w-4" /> {selectedOrder.customerName}</p>
                   <p className="flex items-center gap-2 text-muted-foreground"><Mail className="h-4 w-4" /> {selectedOrder.customerEmail}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Customer Ref:{' '}
+                    {selectedOrder.customerId ? (
+                      <Link className="font-medium text-primary hover:underline" to={`/admin/billing?customer=${selectedOrder.customerId}`}>
+                        {selectedOrder.customerId}
+                      </Link>
+                    ) : (
+                      'Not linked'
+                    )}
+                  </p>
                   <p className="flex items-start gap-2 text-muted-foreground"><MapPin className="mt-0.5 h-4 w-4" /> {selectedOrder.address}</p>
                   <p className="flex items-center gap-2 text-muted-foreground"><CalendarDays className="h-4 w-4" /> {new Date(selectedOrder.date).toLocaleString('en-IN')}</p>
+                </div>
+              </section>
+
+              <section className="space-y-3">
+                <h3 className="text-sm font-semibold">Linked Billing</h3>
+                <div className="space-y-2 rounded-lg border p-3 text-sm">
+                  <p className="text-sm">
+                    Invoice:{' '}
+                    {selectedInvoice ? (
+                      <Link className="font-medium text-primary hover:underline" to={`/admin/billing/${selectedInvoice.id}`}>
+                        {selectedInvoice.invoiceNumber}
+                      </Link>
+                    ) : selectedOrder.invoiceId ? (
+                      <Link className="font-medium text-primary hover:underline" to={`/admin/billing/${selectedOrder.invoiceId}`}>
+                        {selectedOrder.invoiceNumber ?? selectedOrder.invoiceId}
+                      </Link>
+                    ) : (
+                      <span className="font-medium">Not issued yet</span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Invoice Ref:{' '}
+                    {selectedInvoice?.id || selectedOrder.invoiceId ? (
+                      <Link
+                        className="font-medium text-primary hover:underline"
+                        to={`/admin/billing/${selectedInvoice?.id ?? selectedOrder.invoiceId}`}
+                      >
+                        {selectedInvoice?.id ?? selectedOrder.invoiceId}
+                      </Link>
+                    ) : (
+                      'Not linked'
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Payment receipts: {selectedInvoice?.paymentHistory.length ?? 0}
+                  </p>
                 </div>
               </section>
 

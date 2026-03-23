@@ -34,6 +34,7 @@ export interface Order {
   createdAt: string
   status: string
   total: number
+  customerId?: string
   items: Array<{
     productId: string
     name: string
@@ -44,6 +45,7 @@ export interface Order {
   customerEmail?: string
   email?: string
   date?: string
+  invoiceId?: string
 }
 
 export const fmt = new Intl.NumberFormat('en-IN', {

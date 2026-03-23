@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { DollarSign, Package, ShoppingCart, TrendingDown, TrendingUp, Users } from 'lucide-react'
+import { DollarSign, Package, ShoppingCart, TrendingDown, TrendingUp, TriangleAlert, Users } from 'lucide-react'
 import { Badge } from '../../ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
 import { fmt } from '../../../utils'
@@ -202,6 +202,15 @@ export default function DashboardView() {
       ) : null}
       {!isLoading ? (
         <>
+          <Card className="border-amber-200 bg-amber-50">
+            <CardContent className="flex items-start gap-3 p-4 text-sm text-amber-950">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <p>
+                You are viewing a demo product. Data shown here is illustrative and intended to help you explore the workflow.
+              </p>
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {statCards.map((item) => {
               const Icon = item.icon

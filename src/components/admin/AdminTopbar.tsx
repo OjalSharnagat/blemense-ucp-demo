@@ -22,6 +22,8 @@ export default function AdminTopbar({ onOpenSidebar }: { onOpenSidebar: () => vo
   const location = useLocation()
   const segment = location.pathname.split('/')[2] || 'dashboard'
   const title = titles[segment] ?? 'Admin'
+  const adminName = 'Naman Arora'
+  const adminInitials = 'NA'
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur">
@@ -52,9 +54,9 @@ export default function AdminTopbar({ onOpenSidebar }: { onOpenSidebar: () => vo
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
               <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">DS</AvatarFallback>
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">{adminInitials}</AvatarFallback>
               </Avatar>
-              <span className="hidden text-sm sm:inline">Devid Smith</span>
+              <span className="hidden text-sm sm:inline">{adminName}</span>
               <ChevronDown className="h-4 w-4 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>

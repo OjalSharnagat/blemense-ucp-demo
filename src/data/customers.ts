@@ -7,6 +7,9 @@ export interface Customer {
   status: 'active' | 'inactive'
   joinedAt: string
   avatar: string
+  orderIds?: string[]
+  invoiceIds?: string[]
+  paymentIds?: string[]
 }
 
 export const customers: Customer[] = [

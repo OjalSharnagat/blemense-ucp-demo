@@ -179,6 +179,8 @@ export default function InvoicePreview() {
                 {invoice.buyer.city}, {invoice.buyer.state} - {invoice.buyer.pincode}
               </p>
               {businessMode?.showGstFields ? <p>GSTIN: {invoice.buyer.gstin || "Not provided"}</p> : <p>Non-GST bill details</p>}
+              <p>Customer Ref: {invoice.customerId || "Not linked"}</p>
+              <p>Order Ref: {invoice.orderId || "Not linked"}</p>
               <p>State: {invoice.buyer.state}</p>
               <p>State Code: {invoice.buyer.stateCode}</p>
               <p>Place of Supply: {invoice.placeOfSupply}</p>

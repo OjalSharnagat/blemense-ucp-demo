@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ChevronDown, ChevronUp, Eye, PackageSearch } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { fmt } from '../../../utils'
 import { useAdminStore } from '@/lib/store'
+import { useBillingStore } from '@/lib/billingStore'
 import { Badge } from '../../ui/badge'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
@@ -35,6 +37,7 @@ function getInitials(name: string): string {
 
 export default function CustomersView() {
   const { customers } = useAdminStore()
+  const { invoices, payments } = useBillingStore()
   const [search, setSearch] = useState('')
   const [sortField, setSortField] = useState<'name' | 'joinedAt' | 'totalOrders' | 'totalSpent'>('totalSpent')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
@@ -83,9 +86,43 @@ export default function CustomersView() {
     const totalSpent = customers.reduce((sum, customer) => sum + customer.totalSpent, 0)
     const totalOrders = customers.reduce((sum, customer) => sum + customer.totalOrders, 0)
     const avgOrderValue = totalOrders ? totalSpent / totalOrders : 0
+    const linkedInvoices = invoices.filter((invoice) => Boolean(invoice.customerId)).length
+    const linkedPayments = payments.filter((payment) => Boolean(payment.customerId)).length
 
-    return { totalCustomers, activeCount, avgOrderValue }
-  }, [customers])
+    return { totalCustomers, activeCount, avgOrderValue, linkedInvoices, linkedPayments }
+  }, [customers, invoices, payments])
+
+  const billingLinksByCustomer = useMemo(() => {
+    const invoiceMap = new Map<string, { invoiceCount: number; paymentCount: number; invoices: Array<{ id: string; number: string }> }>()
+    const paymentMap = new Map<string, number>()
+
+    for (const invoice of invoices) {
+      if (!invoice.customerId) continue
+      const current = invoiceMap.get(invoice.customerId) ?? { invoiceCount: 0, paymentCount: 0, invoices: [] }
+      current.invoiceCount += 1
+      current.invoices.push({ id: invoice.id, number: invoice.invoiceNumber })
+      current.paymentCount += invoice.paymentHistory.length
+      invoiceMap.set(invoice.customerId, current)
+    }
+
+    for (const payment of payments) {
+      if (!payment.customerId) continue
+      paymentMap.set(payment.customerId, (paymentMap.get(payment.customerId) ?? 0) + 1)
+    }
+
+    return customers.reduce<Record<string, { invoiceCount: number; paymentCount: number; invoices: Array<{ id: string; number: string }> }>>(
+      (acc, customer) => {
+        const billing = invoiceMap.get(customer.id)
+        acc[customer.id] = {
+          invoiceCount: billing?.invoiceCount ?? 0,
+          paymentCount: paymentMap.get(customer.id) ?? 0,
+          invoices: billing?.invoices ?? [],
+        }
+        return acc
+      },
+      {},
+    )
+  }, [customers, invoices, payments])
 
   return (
     <div className="dash-view space-y-6">
@@ -109,7 +146,7 @@ export default function CustomersView() {
           <CardTitle className="text-base">Customer Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <article className="rounded-lg border bg-muted/20 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Customers</p>
               <p className="mt-2 text-2xl font-semibold">{summary.totalCustomers.toLocaleString('en-IN')}</p>
@@ -121,6 +158,10 @@ export default function CustomersView() {
             <article className="rounded-lg border bg-muted/20 p-4">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Avg. Order Value</p>
               <p className="mt-2 text-2xl font-semibold">{fmt.format(summary.avgOrderValue)}</p>
+            </article>
+            <article className="rounded-lg border bg-muted/20 p-4">
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Linked Billing Docs</p>
+              <p className="mt-2 text-2xl font-semibold">{(summary.linkedInvoices + summary.linkedPayments).toLocaleString('en-IN')}</p>
             </article>
           </div>
         </CardContent>
@@ -183,6 +224,7 @@ export default function CustomersView() {
                     <SortIndicator field="totalSpent" />
                   </button>
                 </TableHead>
+                <TableHead>Linked Billing</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -205,6 +247,41 @@ export default function CustomersView() {
                   <TableCell>{customer.totalOrders}</TableCell>
                   <TableCell>{fmt.format(customer.totalSpent)}</TableCell>
                   <TableCell>
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      <p>Orders: {customer.totalOrders}</p>
+                      <p>
+                        Invoices:{' '}
+                        {billingLinksByCustomer[customer.id]?.invoiceCount ? (
+                          <Link className="font-medium text-primary hover:underline" to={`/admin/billing?customer=${customer.id}`}>
+                            {billingLinksByCustomer[customer.id].invoiceCount}
+                          </Link>
+                        ) : (
+                          0
+                        )}
+                      </p>
+                      <p>Payments: {billingLinksByCustomer[customer.id]?.paymentCount ?? 0}</p>
+                      {billingLinksByCustomer[customer.id]?.invoices.length ? (
+                        <div className="space-y-1">
+                          <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Bills</p>
+                          <div className="flex flex-wrap gap-1">
+                            {billingLinksByCustomer[customer.id].invoices.map((invoice, index) => (
+                              <Link
+                                key={`${customer.id}-${invoice.id}-${index}`}
+                                className="rounded-full border px-2 py-0.5 font-medium text-primary hover:bg-primary/5"
+                                to={`/admin/billing/${invoice.id}`}
+                              >
+                                {invoice.number}
+                              </Link>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
+                      <Link className="inline-flex font-medium text-primary hover:underline" to={`/admin/billing?customer=${customer.id}`}>
+                        View billing records
+                      </Link>
+                    </div>
+                  </TableCell>
+                  <TableCell>
                     <Badge variant={customer.status === 'active' ? 'success' : 'secondary'} className="capitalize">
                       {customer.status}
                     </Badge>
@@ -220,7 +297,7 @@ export default function CustomersView() {
 
               {filteredCustomers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground">
                     <div className="mx-auto flex max-w-xs flex-col items-center gap-2 py-6">
                       <PackageSearch className="h-10 w-10 text-muted-foreground/60" />
                       <p className="font-medium text-foreground">No customers found.</p>

@@ -53,8 +53,8 @@ const BillingStoreContext = createContext<BillingStoreValue | null>(null);
 const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
   gstRegistrationStatus: "UNREGISTERED",
   gstin: "",
-  legalName: "Your Business Name",
-  tradeName: "My Store",
+  legalName: "ABC Enterprises",
+  tradeName: "ABC Enterprises",
   businessType: "PROPRIETORSHIP",
   businessScale: "SMALL",
   businessCategory: "BOTH",
@@ -89,8 +89,8 @@ const DEFAULT_BUSINESS_PROFILE: BusinessProfile = {
 const SEED_BUSINESS_PROFILE: BusinessProfile = {
   gstRegistrationStatus: "REGISTERED",
   gstin: "27AAECS1234F1Z5",
-  legalName: "Sampurna Living Private Limited",
-  tradeName: "Sampurna Home",
+  legalName: "ABC Enterprises",
+  tradeName: "ABC Enterprises",
   businessType: "PRIVATE_LIMITED",
   businessScale: "ESTABLISHED",
   businessCategory: "BOTH",
@@ -274,6 +274,8 @@ const buildInvoice = (args: {
   linkedInvoiceId?: string;
   amountPaid?: number;
   seller?: BusinessProfile;
+  customerId?: string;
+  orderId?: string;
 }): Invoice => {
   const financialYear = getCurrentFinancialYear(args.issueDate);
   const seller = args.seller ?? SEED_BUSINESS_PROFILE;
@@ -298,6 +300,8 @@ const buildInvoice = (args: {
     isInterState,
     isRCM: false,
     placeOfSupply: args.buyer.state,
+    customerId: args.customerId,
+    orderId: args.orderId,
     notes: args.notes ?? "",
     terms: "Payment due within 15 days from issue date.",
     linkedInvoiceId: args.linkedInvoiceId,
@@ -318,6 +322,21 @@ const findParty = (id: string): Party => {
   return party;
 };
 
+const DEMO_RECORDED_LINKS: Record<string, { customerId: string; orderId: string }> = {
+  "inv-001": { customerId: "cus_9001", orderId: "ord_5001" },
+  "inv-002": { customerId: "cus_9002", orderId: "ord_5002" },
+  "inv-003": { customerId: "cus_9003", orderId: "ord_5003" },
+  "inv-004": { customerId: "cus_9004", orderId: "ord_5004" },
+  "inv-005": { customerId: "cus_9005", orderId: "ord_5005" },
+  "inv-006": { customerId: "cus_9006", orderId: "ord_5006" },
+  "inv-007": { customerId: "cus_9007", orderId: "ord_5007" },
+  "inv-008": { customerId: "cus_9008", orderId: "ord_5008" },
+  "inv-009": { customerId: "cus_9009", orderId: "ord_5009" },
+  "inv-010": { customerId: "cus_9010", orderId: "ord_5010" },
+  "inv-011": { customerId: "cus_9011", orderId: "ord_5011" },
+  "inv-012": { customerId: "cus_9012", orderId: "ord_5012" },
+};
+
 const SEED_INVOICES: Invoice[] = [
   buildInvoice({
     id: "inv-001",
@@ -328,6 +347,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 1,
     status: "PAID",
     buyer: findParty("pty-royal-retail"),
+    ...DEMO_RECORDED_LINKS["inv-001"],
     lineItems: [
       makeLineItem("li-1", "Solid Wood Console Table", "9403", 4, 18500, 18),
       makeLineItem("li-2", "Handcrafted Table Lamp", "9405", 10, 2200, 12, 500),
@@ -343,6 +363,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 2,
     status: "PARTIALLY_PAID",
     buyer: findParty("pty-neelam-kitchens"),
+    ...DEMO_RECORDED_LINKS["inv-002"],
     lineItems: [
       makeLineItem("li-3", "Steel Cookware Set (12 pcs)", "7323", 18, 3250, 18),
       makeLineItem("li-4", "Glass Serving Bowls", "7013", 24, 780, 18),
@@ -358,6 +379,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 3,
     status: "FINALIZED",
     buyer: findParty("pty-lotus-lights"),
+    ...DEMO_RECORDED_LINKS["inv-003"],
     lineItems: [
       makeLineItem("li-5", "Pendant Lighting Cluster", "9405", 12, 5400, 12),
       makeLineItem("li-6", "Decorative Wall Mirror", "7009", 8, 4300, 18),
@@ -372,6 +394,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 4,
     status: "OVERDUE",
     buyer: findParty("pty-south-boutique"),
+    ...DEMO_RECORDED_LINKS["inv-004"],
     lineItems: [
       makeLineItem("li-7", "Premium Room Linen Pack", "6302", 60, 950, 5),
       makeLineItem("li-8", "Bathroom Accessories Set", "3924", 36, 1650, 18),
@@ -387,6 +410,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 5,
     status: "PAID",
     buyer: findParty("pty-kokila-residency"),
+    ...DEMO_RECORDED_LINKS["inv-005"],
     lineItems: [
       makeLineItem("li-9", "Sofa Set - 3+2", "9403", 3, 46500, 18),
       makeLineItem("li-10", "Indoor Rugs", "5703", 10, 3200, 12),
@@ -402,6 +426,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 6,
     status: "FINALIZED",
     buyer: findParty("pty-aarav-home"),
+    ...DEMO_RECORDED_LINKS["inv-006"],
     lineItems: [
       makeLineItem("li-11", "Kitchen Organizer Combo", "7323", 55, 890, 18),
       makeLineItem("li-12", "Storage Baskets", "3924", 70, 420, 18),
@@ -416,6 +441,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 7,
     status: "PARTIALLY_PAID",
     buyer: findParty("pty-raghav-villa"),
+    ...DEMO_RECORDED_LINKS["inv-007"],
     lineItems: [
       makeLineItem("li-13", "Custom Wardrobe Units", "9403", 15, 28000, 18),
       makeLineItem("li-14", "Modular Kitchen Pantry", "9403", 8, 42000, 18),
@@ -431,6 +457,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 8,
     status: "DRAFT",
     buyer: findParty("pty-jaya-homes"),
+    ...DEMO_RECORDED_LINKS["inv-008"],
     lineItems: [
       makeLineItem("li-15", "Dining Table Set (8 seater)", "9403", 12, 36500, 18),
       makeLineItem("li-16", "Designer Ceiling Lights", "9405", 20, 7800, 12),
@@ -445,6 +472,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 9,
     status: "CANCELLED",
     buyer: findParty("pty-aarav-home"),
+    ...DEMO_RECORDED_LINKS["inv-009"],
     lineItems: [makeLineItem("li-17", "Office Storage Cabinets", "9403", 6, 21500, 18)],
   }),
   buildInvoice({
@@ -456,6 +484,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 1,
     status: "DRAFT",
     buyer: findParty("pty-kokila-residency"),
+    ...DEMO_RECORDED_LINKS["inv-010"],
     lineItems: [
       makeLineItem("li-18", "Complete Hotel Furniture Package", "9403", 11, 350000, 18),
       makeLineItem("li-19", "Lobby Chandeliers", "9405", 6, 115000, 12),
@@ -470,6 +499,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 1,
     status: "FINALIZED",
     buyer: findParty("pty-neelam-kitchens"),
+    ...DEMO_RECORDED_LINKS["inv-011"],
     lineItems: [makeLineItem("li-20", "Rate Difference Adjustment", "9961", 1, 15000, 18)],
     linkedInvoiceId: "inv-002",
     notes: "Credit note issued for damaged cookware batch return.",
@@ -483,6 +513,7 @@ const SEED_INVOICES: Invoice[] = [
     sequence: 1,
     status: "FINALIZED",
     buyer: findParty("pty-royal-retail"),
+    ...DEMO_RECORDED_LINKS["inv-012"],
     lineItems: [makeLineItem("li-21", "Freight and Packing Recovery", "9965", 1, 8500, 18)],
     linkedInvoiceId: "inv-001",
     notes: "Debit note raised toward additional logistics charge.",
@@ -493,6 +524,8 @@ const initialPayments: Payment[] = [
   {
     id: "pay-001",
     invoiceId: "inv-001",
+    customerId: "cus_9001",
+    orderId: "ord_5001",
     date: "2025-04-10",
     amount: 115640,
     mode: "BANK_TRANSFER",
@@ -502,6 +535,8 @@ const initialPayments: Payment[] = [
   {
     id: "pay-002",
     invoiceId: "inv-002",
+    customerId: "cus_9002",
+    orderId: "ord_5002",
     date: "2025-04-25",
     amount: 50000,
     mode: "UPI",
@@ -511,6 +546,8 @@ const initialPayments: Payment[] = [
   {
     id: "pay-003",
     invoiceId: "inv-004",
+    customerId: "cus_9004",
+    orderId: "ord_5004",
     date: "2025-06-03",
     amount: 12000,
     mode: "CHEQUE",
@@ -520,6 +557,8 @@ const initialPayments: Payment[] = [
   {
     id: "pay-004",
     invoiceId: "inv-005",
+    customerId: "cus_9005",
+    orderId: "ord_5005",
     date: "2025-06-20",
     amount: 205910,
     mode: "BANK_TRANSFER",
@@ -529,6 +568,8 @@ const initialPayments: Payment[] = [
   {
     id: "pay-005",
     invoiceId: "inv-007",
+    customerId: "cus_9007",
+    orderId: "ord_5007",
     date: "2025-08-15",
     amount: 300000,
     mode: "BANK_TRANSFER",
@@ -713,9 +754,12 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
         );
       },
       addPayment: (paymentInput) => {
+        const sourceInvoice = invoices.find((invoice) => invoice.id === paymentInput.invoiceId);
         const payment: Payment = {
           ...paymentInput,
           id: paymentInput.id ?? `pay-${Date.now().toString(36)}`,
+          customerId: paymentInput.customerId ?? sourceInvoice?.customerId,
+          orderId: paymentInput.orderId ?? sourceInvoice?.orderId,
         };
 
         setPayments((prev) => [payment, ...prev]);

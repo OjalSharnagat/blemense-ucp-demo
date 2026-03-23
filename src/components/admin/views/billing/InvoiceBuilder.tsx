@@ -564,6 +564,9 @@ export default function InvoiceBuilder() {
   );
   const errorIssues = validationIssues.filter((issue) => issue.severity === "error");
   const warningIssues = validationIssues.filter((issue) => issue.severity === "warning");
+  const primaryIssue = errorIssues[0] ?? warningIssues[0];
+  const hasErrors = errorIssues.length > 0;
+  const hasWarnings = warningIssues.length > 0;
 
   const fieldIssues = (field: string) => validationIssues.filter((issue) => issue.field === field || issue.field.startsWith(`${field}.`));
 
@@ -671,11 +674,31 @@ export default function InvoiceBuilder() {
           </div>
 
           {validationIssues.length > 0 ? (
-            <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
-              <p className="font-medium text-amber-900">
-                {errorIssues.length} error(s), {warningIssues.length} warning(s) in current invoice.
-              </p>
-              <p className="text-xs text-amber-800">Review inline highlights or open Finalize modal for full list.</p>
+            <div
+              className={cn(
+                "rounded-md border px-3 py-2 text-sm",
+                hasErrors ? "border-rose-200 bg-rose-50" : "border-slate-200 bg-slate-50",
+              )}
+            >
+              <div className="flex items-start gap-2">
+                <AlertCircle className={cn("mt-0.5 h-4 w-4 shrink-0", hasErrors ? "text-rose-600" : "text-slate-500")} />
+                <div className="space-y-0.5">
+                  <p className={cn("font-medium", hasErrors ? "text-rose-900" : "text-slate-900")}>
+                    {hasErrors
+                      ? `${errorIssues.length} issue${errorIssues.length === 1 ? "" : "s"} need attention`
+                      : `${warningIssues.length} advisory note${warningIssues.length === 1 ? "" : "s"}`
+                    }
+                  </p>
+                  {primaryIssue ? (
+                    <p className={cn("text-xs", hasErrors ? "text-rose-800" : "text-slate-600")}>{primaryIssue.message}</p>
+                  ) : null}
+                  <p className={cn("text-xs", hasErrors ? "text-rose-700" : "text-slate-500")}>
+                    {hasWarnings
+                      ? "You can continue drafting, but review these before finalizing."
+                      : "Resolve the highlighted issues before finalizing this invoice."}
+                  </p>
+                </div>
+              </div>
             </div>
           ) : null}
 

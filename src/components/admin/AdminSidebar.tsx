@@ -17,6 +17,9 @@ export default function AdminSidebar({
 }) {
   const { businessProfile } = useBillingStore()
   const businessMode = getBusinessModeConfig(businessProfile)
+  const adminName = 'Naman Arora'
+  const adminInitials = 'NA'
+  const businessName = businessProfile.tradeName || businessProfile.legalName || 'ABC Enterprises'
 
   return (
     <>
@@ -36,12 +39,12 @@ export default function AdminSidebar({
       >
       <div className="flex h-full flex-col">
         <div className="border-b border-slate-800 px-4 py-4">
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white">
-              <Store className="h-4 w-4" />
-            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white">
+                <Store className="h-4 w-4" />
+              </div>
             <div>
-              <p className="text-sm font-semibold text-white">Kick X</p>
+              <p className="text-sm font-semibold text-white">{businessName}</p>
               <p className="text-xs text-slate-400">Admin Console</p>
             </div>
           </div>
@@ -169,10 +172,10 @@ export default function AdminSidebar({
           <div className="flex items-center justify-between rounded-md bg-slate-800/60 px-3 py-2">
             <div className="flex items-center gap-2">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-blue-600 text-xs text-white">DS</AvatarFallback>
+                <AvatarFallback className="bg-blue-600 text-xs text-white">{adminInitials}</AvatarFallback>
               </Avatar>
               <div>
-                <p className="text-sm font-medium text-slate-100">Devid Smith</p>
+                <p className="text-sm font-medium text-slate-100">{adminName}</p>
                 <p className="text-xs text-slate-400">Admin</p>
               </div>
             </div>
