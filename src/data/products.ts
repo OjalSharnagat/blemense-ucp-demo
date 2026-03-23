@@ -1,3 +1,6 @@
+import type { GstRateSource, TaxCodeSource } from "./billing";
+import type { TaxCodeType } from "./gst";
+
 export interface Product {
   id: string
   name: string
@@ -11,6 +14,12 @@ export interface Product {
   description: string
   createdAt: string
   hsn?: string
+  taxCode?: string
+  taxCodeType?: TaxCodeType
+  taxCodeSource?: TaxCodeSource
+  gstRateSource?: GstRateSource
+  gstRateOverride?: number
+  isService?: boolean
   gstRate?: number
 }
 

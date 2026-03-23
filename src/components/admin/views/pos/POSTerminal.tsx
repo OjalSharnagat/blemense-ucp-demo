@@ -23,6 +23,7 @@ import { useAdminStore } from "@/lib/store";
 import { useBillingStore } from "@/lib/billingStore";
 import { getBusinessModeConfig } from "@/lib/businessMode";
 import { usePosStore } from "@/lib/posStore";
+import { resolveTaxCode } from "@/lib/gst";
 import type { POSOrder, POSPaymentMode } from "@/data/pos";
 import type { LineItem, Party } from "@/data/billing";
 import POSReceipt from "./POSReceipt";
@@ -1171,7 +1172,10 @@ export default function POSTerminal() {
                             <div className="min-w-0 flex-1">
                               <p className="truncate text-sm font-semibold text-slate-900">{item.name}</p>
                               <p className="mt-1 text-xs text-slate-600">
-                                {item.hsn ? `HSN ${item.hsn}` : "No HSN"} {product?.sku ? `• ${product.sku}` : ""}
+                                {(() => {
+                                  const resolution = resolveTaxCode(item);
+                                  return resolution.code ? `${resolution.codeType} ${resolution.code}` : "No HSN/SAC";
+                                })()} {product?.sku ? `• ${product.sku}` : ""}
                               </p>
                             </div>
                             <button

@@ -1,6 +1,6 @@
 import type { Invoice } from "@/data/billing";
 import { INDIAN_STATES } from "@/data/gst";
-import { computeIsInterState, validateGSTIN } from "@/lib/gst";
+import { computeIsInterState, resolveTaxCode, validateGSTIN } from "@/lib/gst";
 
 export type ValidationSeverity = "error" | "warning";
 
@@ -32,8 +32,6 @@ const getInvoiceSequence = (invoiceNumber: string): number | null => {
   const num = Number(match[1]);
   return Number.isFinite(num) ? num : null;
 };
-
-const isValidHSNOrSAC = (value: string): boolean => /^[0-9]{4,8}$/.test(value.trim());
 
 const detectSequenceGap = (invoice: Invoice, existingInvoices: Invoice[]): boolean => {
   const thisSequence = getInvoiceSequence(invoice.invoiceNumber);
@@ -133,17 +131,54 @@ export function validateInvoice(invoice: Invoice, options?: ValidateInvoiceOptio
 
   if (sellerUsesGst) {
     invoice.lineItems.forEach((item, index) => {
-      if (!item.hsn?.trim()) {
+      const resolution = resolveTaxCode(item);
+      if (!resolution.code) {
         issues.push({
           field: `lineItems[${index}].hsn`,
-          message: `Line ${index + 1}: HSN/SAC is recommended.`,
-          severity: "warning",
+          message: `Line ${index + 1}: ${item.isService ? "SAC" : "HSN"} is required.`,
+          severity: "error",
         });
-      } else if (!isValidHSNOrSAC(item.hsn)) {
+        return;
+      }
+
+      if (!/^[0-9]{4,8}$/.test(resolution.code)) {
         issues.push({
           field: `lineItems[${index}].hsn`,
           message: `Line ${index + 1}: HSN/SAC must be 4 to 8 numeric digits.`,
           severity: "error",
+        });
+        return;
+      }
+
+      if (item.isService && resolution.codeType === "HSN") {
+        issues.push({
+          field: `lineItems[${index}].hsn`,
+          message: `Line ${index + 1}: This looks like a goods code, but the item is marked as a service.`,
+          severity: "warning",
+        });
+      }
+
+      if (!item.isService && resolution.codeType === "SAC") {
+        issues.push({
+          field: `lineItems[${index}].hsn`,
+          message: `Line ${index + 1}: This looks like a service code, but the item is marked as goods.`,
+          severity: "warning",
+        });
+      }
+
+      if (resolution.rateMismatch) {
+        issues.push({
+          field: `lineItems[${index}].gstRate`,
+          message: `Line ${index + 1}: GST rate differs from the catalog default for ${resolution.codeType} ${resolution.code}.`,
+          severity: "warning",
+        });
+      }
+
+      if (resolution.hasCatalogMatch && resolution.source === "LEGACY" && resolution.effectiveGstRate !== resolution.defaultGstRate) {
+        issues.push({
+          field: `lineItems[${index}].gstRate`,
+          message: `Line ${index + 1}: Saved GST rate differs from the default catalog rate for ${resolution.codeType} ${resolution.code}.`,
+          severity: "warning",
         });
       }
     });

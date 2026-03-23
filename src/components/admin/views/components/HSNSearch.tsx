@@ -1,31 +1,38 @@
-import { HSN_CODES } from "@/data/gst";
+import { TAX_CODE_MASTER, type TaxCodeType } from "@/data/gst";
 import { Input } from "../../../ui/input";
 
 interface HSNSearchProps {
   value: string;
   disabled?: boolean;
+  codeType?: TaxCodeType | "BOTH";
   onChange: (value: string) => void;
   onRateSelect?: (rate: number) => void;
+  onCodeTypeChange?: (codeType: TaxCodeType) => void;
 }
 
-export default function HSNSearch({ value, disabled, onChange, onRateSelect }: HSNSearchProps) {
+export default function HSNSearch({ value, disabled, codeType = "BOTH", onChange, onRateSelect, onCodeTypeChange }: HSNSearchProps) {
+  const codes = TAX_CODE_MASTER.filter((entry) => codeType === "BOTH" || entry.codeType === codeType);
+
   return (
     <>
       <Input
-        list="hsn-codes-shared"
+        list="tax-codes-shared"
         value={value}
         disabled={disabled}
         onChange={(event) => {
           const normalized = event.target.value.toUpperCase();
           onChange(normalized);
-          const matched = HSN_CODES.find((code) => code.code === normalized);
-          if (matched) onRateSelect?.(matched.defaultGstRate);
+          const matched = TAX_CODE_MASTER.find((code) => code.code === normalized);
+          if (matched) {
+            onRateSelect?.(matched.defaultGstRate);
+            onCodeTypeChange?.(matched.codeType);
+          }
         }}
       />
-      <datalist id="hsn-codes-shared">
-        {HSN_CODES.map((code) => (
+      <datalist id="tax-codes-shared">
+        {codes.map((code) => (
           <option key={code.code} value={code.code}>
-            {code.description}
+            {code.codeType} {code.code} - {code.description}
           </option>
         ))}
       </datalist>

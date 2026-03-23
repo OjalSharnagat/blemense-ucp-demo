@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BusinessProfile } from "@/data/billing";
 import type { POSOrder, POSSettings } from "@/data/pos";
+import { resolveTaxCode } from "@/lib/gst";
 import { cn } from "@/lib/utils";
 import { fmt } from "@/utils";
 
@@ -195,7 +196,14 @@ export default function POSReceipt({
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[9.5px] font-semibold leading-tight text-slate-900">{item.name}</p>
-                    {showHsn && item.hsn ? <p className="mt-[1px] text-[7.5px] font-medium uppercase tracking-[0.18em] text-slate-500">HSN {item.hsn}</p> : null}
+                    {showHsn ? (() => {
+                      const resolution = resolveTaxCode(item);
+                      return resolution.code ? (
+                        <p className="mt-[1px] text-[7.5px] font-medium uppercase tracking-[0.18em] text-slate-500">
+                          {resolution.codeType} {resolution.code}
+                        </p>
+                      ) : null;
+                    })() : null}
                     {gstRegistered && item.gstRate ? (
                       <p className="mt-[1px] text-[7.5px] font-medium uppercase tracking-[0.18em] text-slate-500">GST @ {item.gstRate}%</p>
                     ) : null}

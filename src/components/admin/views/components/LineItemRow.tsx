@@ -40,6 +40,7 @@ export default function LineItemRow({
 }: LineItemRowProps) {
   const tax = computeLineItemTax(item, isInterState);
   const rowTotal = tax.taxableValue + tax.cgstAmount + tax.sgstAmount + tax.igstAmount;
+  const codeType = item.taxCodeType ?? (item.isService ? "SAC" : "HSN");
 
   return (
     <tr draggable={draggable} onDragStart={onDragStart} onDragOver={onDragOver} onDrop={onDrop} className="align-top">
@@ -80,9 +81,10 @@ export default function LineItemRow({
       {showHsnSac ? (
         <td className="min-w-28">
           <HSNSearch
-            value={item.hsn}
+            value={item.taxCode ?? item.hsn}
             disabled={!isEditable}
-            onChange={(value) => onUpdate({ hsn: value })}
+            codeType={codeType}
+            onChange={(value) => onUpdate({ hsn: value, taxCode: value, taxCodeType: codeType })}
             onRateSelect={(rate) => onUpdate({ gstRate: rate })}
           />
         </td>

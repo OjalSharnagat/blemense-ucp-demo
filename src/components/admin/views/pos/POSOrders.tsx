@@ -15,6 +15,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { BusinessProfile } from "@/data/billing";
 import type { POSOrder, POSOrderStatus, POSPaymentMode, POSRefundItemInput, POSRefundRecord, POSSession, POSSettings } from "@/data/pos";
 import { useBillingStore } from "@/lib/billingStore";
+import { resolveTaxCode } from "@/lib/gst";
 import { cn } from "@/lib/utils";
 import { usePosStore } from "@/lib/posStore";
 import { fmt } from "@/utils";
@@ -898,7 +899,14 @@ export default function POSOrders() {
                               <TableCell>
                                 <div className="space-y-1">
                                   <p className="font-medium text-slate-900">{item.name}</p>
-                                  {gstRegistered && item.hsn ? <p className="text-xs text-slate-500">HSN {item.hsn}</p> : null}
+                                  {gstRegistered ? (() => {
+                                    const resolution = resolveTaxCode(item);
+                                    return resolution.code ? (
+                                      <p className="text-xs text-slate-500">
+                                        {resolution.codeType} {resolution.code}
+                                      </p>
+                                    ) : null;
+                                  })() : null}
                                 </div>
                               </TableCell>
                               <TableCell className="text-slate-600">{item.quantity}</TableCell>

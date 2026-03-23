@@ -18,6 +18,7 @@ import type {
 import { DEFAULT_POS_SETTINGS } from "@/data/pos";
 import { useBillingStore } from "@/lib/billingStore";
 import { useAdminStore } from "@/lib/store";
+import { resolveTaxCode } from "@/lib/gst";
 import type { Product } from "@/utils";
 
 type PosStoreValue = {
@@ -259,14 +260,19 @@ const buildWalkInBuyer = (businessProfile: BusinessProfile, customerName?: strin
 const toInvoiceLineItem = (item: POSLineItem): LineItem => ({
   id: item.id,
   description: item.name,
-  hsn: item.hsn ?? "",
+  hsn: item.taxCode ?? item.hsn ?? "",
+  taxCode: item.taxCode ?? item.hsn ?? "",
+  taxCodeType: item.taxCodeType,
+  taxCodeSource: item.taxCodeSource,
+  gstRateSource: item.gstRateSource,
+  gstRateOverride: item.gstRateOverride,
   quantity: item.quantity,
   unit: "NOS",
   unitPrice: item.unitPrice,
   discount: item.discount,
   discountType: "flat",
   gstRate: item.gstRate ?? 0,
-  isService: false,
+  isService: Boolean(item.isService),
 });
 
 const sumLineTotals = (items: POSLineItem[]): number => round2(items.reduce((sum, item) => sum + item.total, 0));
@@ -489,6 +495,16 @@ export function PosStoreProvider({ children }: PropsWithChildren) {
         const existing = cart.find((item) => item.productId === product.id);
         const nextQuantity = (existing?.quantity ?? 0) + 1;
         const maxStock = stockManaged ? product.stock : Number.POSITIVE_INFINITY;
+        const taxCodeResolution = resolveTaxCode({
+          hsn: product.taxCode ?? product.hsn,
+          taxCode: product.taxCode ?? product.hsn,
+          taxCodeType: product.taxCodeType,
+          taxCodeSource: product.taxCodeSource,
+          gstRate: product.gstRate,
+          gstRateSource: product.gstRateSource,
+          gstRateOverride: product.gstRateOverride,
+          isService: product.isService,
+        });
         let warning: string | undefined;
 
         if (stockManaged && !settings.allowNegativeStock && nextQuantity > maxStock) {
@@ -504,11 +520,17 @@ export function PosStoreProvider({ children }: PropsWithChildren) {
           id: existing?.id ?? generateId("pos-cart"),
           productId: product.id,
           name: product.name,
-          hsn: product.hsn,
+          hsn: product.hsn ?? taxCodeResolution.code,
+          taxCode: product.taxCode ?? product.hsn ?? taxCodeResolution.code,
+          taxCodeType: taxCodeResolution.codeType,
+          taxCodeSource: product.taxCodeSource ?? taxCodeResolution.source,
+          gstRateSource: product.gstRateSource ?? taxCodeResolution.rateSource,
+          gstRateOverride: product.gstRateOverride,
+          isService: product.isService,
           quantity: effectiveQuantity,
           unitPrice: round2(product.price),
           discount: round2(existing?.discount ?? 0),
-          gstRate: product.gstRate,
+          gstRate: product.gstRate ?? taxCodeResolution.effectiveGstRate,
           taxAmount: 0,
           total: 0,
           maxStock,
@@ -652,16 +674,22 @@ export function PosStoreProvider({ children }: PropsWithChildren) {
           id: generateId("pos-order"),
           sessionId: currentSession.id,
           orderNumber: generateOrderNumber(orderSequence),
-          items: pricing.items.map((item) => ({
-            id: item.id,
-            productId: item.productId,
-            name: item.name,
-            hsn: item.hsn,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            discount: item.discount,
-            gstRate: item.gstRate,
-            taxAmount: item.taxAmount,
+            items: pricing.items.map((item) => ({
+              id: item.id,
+              productId: item.productId,
+              name: item.name,
+              hsn: item.hsn,
+              taxCode: item.taxCode,
+              taxCodeType: item.taxCodeType,
+              taxCodeSource: item.taxCodeSource,
+              gstRateSource: item.gstRateSource,
+              gstRateOverride: item.gstRateOverride,
+              isService: item.isService,
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              discount: item.discount,
+              gstRate: item.gstRate,
+              taxAmount: item.taxAmount,
             total: item.total,
           })),
           subtotal: pricing.subtotal,

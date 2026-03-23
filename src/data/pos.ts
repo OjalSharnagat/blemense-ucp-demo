@@ -1,4 +1,6 @@
 import type { TaxBreakdown } from "./billing";
+import type { GstRateSource, TaxCodeSource } from "./billing";
+import type { TaxCodeType } from "./gst";
 
 export type POSSessionStatus = "OPEN" | "CLOSED";
 export type POSPaymentMode = "CASH" | "UPI" | "CARD" | "SPLIT";
@@ -18,6 +20,12 @@ export interface POSLineItem {
   productId: string;
   name: string;
   hsn?: string;
+  taxCode?: string;
+  taxCodeType?: TaxCodeType;
+  taxCodeSource?: TaxCodeSource;
+  gstRateSource?: GstRateSource;
+  gstRateOverride?: number;
+  isService?: boolean;
   quantity: number;
   unitPrice: number;
   discount: number;

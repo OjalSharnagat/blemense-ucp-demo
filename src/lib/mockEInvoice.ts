@@ -1,8 +1,9 @@
 import type { Invoice } from "@/data/billing";
+import { computeLineItemTax, resolveTaxCode } from "@/lib/gst";
 
 type MockEInvoiceSource = Pick<
   Invoice,
-  "invoiceNumber" | "issueDate" | "supplyDate" | "seller" | "buyer" | "type" | "taxBreakdown" | "financialYear"
+  "invoiceNumber" | "issueDate" | "supplyDate" | "seller" | "buyer" | "type" | "taxBreakdown" | "financialYear" | "lineItems"
 >;
 
 export interface MockEInvoiceDetails {
@@ -10,6 +11,7 @@ export interface MockEInvoiceDetails {
   irnAcknowledgementNumber: string;
   irnAcknowledgementDate: string;
   irnQrCodeDataUrl: string;
+  mockEInvoicePayload: Invoice["mockEInvoicePayload"];
 }
 
 const hashString = (value: string): string => {
@@ -88,17 +90,42 @@ export const generateMockEInvoice = (invoice: MockEInvoiceSource, timestamp = ne
     invoice.financialYear,
   ].join("|");
 
+  const lineItems = invoice.lineItems.map((item) => {
+    const resolution = resolveTaxCode(item);
+    const tax = computeLineItemTax(item, invoice.seller.stateCode.trim() !== invoice.buyer.stateCode.trim());
+    return {
+      description: item.description,
+      taxCode: resolution.code,
+      taxCodeType: resolution.codeType,
+      hsn: item.hsn || resolution.code,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      gstRate: resolution.effectiveGstRate,
+      taxableValue: tax.taxableValue,
+      taxAmount: tax.igstAmount + tax.cgstAmount + tax.sgstAmount,
+    };
+  });
+
   const irn = `MOCK-${buildHexChain(seed)}`;
   const acknowledgementSeed = `${seed}|ack`;
   const irnAcknowledgementNumber = `${buildHexChain(acknowledgementSeed).replace(/[A-F]/g, "").slice(0, 15)}`.padStart(15, "0");
   const irnAcknowledgementDate = timestamp.toISOString();
   const irnQrCodeDataUrl = buildMockQrSvg(`${irn}|${irnAcknowledgementNumber}`);
+  const mockEInvoicePayload = {
+    lineItems,
+    totals: {
+      taxableValue: invoice.taxBreakdown.taxableValue,
+      totalTax: invoice.taxBreakdown.totalTax,
+      grandTotal: invoice.taxBreakdown.grandTotal,
+    },
+  };
 
   return {
     irn,
     irnAcknowledgementNumber,
     irnAcknowledgementDate,
     irnQrCodeDataUrl,
+    mockEInvoicePayload,
   };
 };
 

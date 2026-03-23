@@ -1,3 +1,6 @@
+import type { GstRateSource, TaxCodeSource } from '@/data/billing'
+import type { TaxCodeType } from '@/data/gst'
+
 export interface Variant {
   id: string
   size?: string
@@ -22,6 +25,12 @@ export interface Product {
   createdAt?: string
   variants?: Variant[]
   hsn?: string
+  taxCode?: string
+  taxCodeType?: TaxCodeType
+  taxCodeSource?: TaxCodeSource
+  gstRateSource?: GstRateSource
+  gstRateOverride?: number
+  isService?: boolean
   gstRate?: number
 }
 

@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import type { Product } from '../../utils'
 import { useBillingStore } from '@/lib/billingStore'
 import { getBusinessModeConfig } from '@/lib/businessMode'
+import { TAX_CODE_MASTER } from '@/data/gst'
 import { Button } from '../ui/button'
 import {
   Dialog,
@@ -14,6 +15,7 @@ import {
 } from '../ui/dialog'
 import { Input } from '../ui/input'
 import { Select } from '../ui/select'
+import HSNSearch from './views/components/HSNSearch'
 
 type ProductStatus = 'active' | 'draft' | 'archived'
 
@@ -26,6 +28,12 @@ type ProductFormValues = {
   status: ProductStatus
   description: string
   hsn: string
+  isService: boolean
+  taxCode?: string
+  taxCodeType?: 'HSN' | 'SAC'
+  taxCodeSource?: 'CATALOG' | 'MANUAL' | 'LEGACY'
+  gstRateSource?: 'CATALOG' | 'MANUAL' | 'OVERRIDE' | 'LEGACY'
+  gstRateOverride?: number
   gstRate: number
 }
 
@@ -38,6 +46,7 @@ const defaultValues: ProductFormValues = {
   status: 'active',
   description: '',
   hsn: '',
+  isService: false,
   gstRate: 0
 }
 
@@ -71,6 +80,7 @@ export default function ProductPanel({
         status: (product.status || 'active') as ProductStatus,
         description: product.description || '',
         hsn: product.hsn || '',
+        isService: Boolean(product.isService),
         gstRate: product.gstRate || 0
       })
       return
@@ -86,6 +96,8 @@ export default function ProductPanel({
     event.preventDefault()
 
     if (!values.name.trim()) return
+    const normalizedCode = values.hsn.trim().toUpperCase()
+    const matched = TAX_CODE_MASTER.find((entry) => entry.code === normalizedCode)
 
     onSubmit({
       ...values,
@@ -95,8 +107,14 @@ export default function ProductPanel({
       price: Math.max(0, Number(values.price) || 0),
       stock: Math.max(0, Number(values.stock) || 0),
       description: values.description.trim(),
-      hsn: businessMode.showTaxColumns ? values.hsn.trim().toUpperCase() : '',
-      gstRate: businessMode.showTaxColumns ? Math.max(0, Number(values.gstRate) || 0) : 0
+      hsn: businessMode.showTaxColumns ? normalizedCode : '',
+      taxCode: businessMode.showTaxColumns ? normalizedCode : '',
+      taxCodeType: businessMode.showTaxColumns ? (matched?.codeType ?? (values.isService ? 'SAC' : 'HSN')) : undefined,
+      taxCodeSource: businessMode.showTaxColumns ? (matched ? 'CATALOG' : 'MANUAL') : undefined,
+      gstRateSource: businessMode.showTaxColumns ? (matched ? 'CATALOG' : 'MANUAL') : undefined,
+      isService: businessMode.showTaxColumns ? values.isService : false,
+      gstRate: businessMode.showTaxColumns ? Math.max(0, Number(values.gstRate) || 0) : 0,
+      gstRateOverride: businessMode.showTaxColumns && matched && Math.abs((Number(values.gstRate) || 0) - matched.defaultGstRate) > 0.01 ? Number(values.gstRate) : undefined
     })
   }
 
@@ -206,12 +224,25 @@ export default function ProductPanel({
           {businessMode.showTaxColumns ? (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="grid gap-2">
-                <label className="text-sm font-medium" htmlFor="product-hsn">HSN / SAC</label>
-                <Input
-                  id="product-hsn"
+                <label className="text-sm font-medium" htmlFor="product-item-type">Item Type</label>
+                <Select
+                  id="product-item-type"
+                  value={values.isService ? 'service' : 'goods'}
+                  onChange={(event) => setValues((prev) => ({ ...prev, isService: event.target.value === 'service' }))}
+                >
+                  <option value="goods">Goods (HSN)</option>
+                  <option value="service">Service (SAC)</option>
+                </Select>
+              </div>
+              <div className="grid gap-2">
+                <label className="text-sm font-medium" htmlFor="product-hsn">
+                  {values.isService ? 'SAC' : 'HSN'}
+                </label>
+                <HSNSearch
                   value={values.hsn}
-                  onChange={(event) => setValues((prev) => ({ ...prev, hsn: event.target.value.toUpperCase() }))}
-                  placeholder="HSN or SAC"
+                  codeType={values.isService ? 'SAC' : 'HSN'}
+                  onChange={(value) => setValues((prev) => ({ ...prev, hsn: value }))}
+                  onRateSelect={(rate) => setValues((prev) => ({ ...prev, gstRate: rate }))}
                 />
               </div>
               <div className="grid gap-2">

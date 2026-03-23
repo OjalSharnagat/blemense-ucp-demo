@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { BusinessProfile, Invoice, InvoiceType, LineItem, Party } from "@/data/billing";
-import { HSN_CODES, INDIAN_STATES } from "@/data/gst";
+import { INDIAN_STATES, TAX_CODE_MASTER } from "@/data/gst";
 import { getBusinessModeConfig } from "@/lib/businessMode";
 import { useBillingStore } from "@/lib/billingStore";
 import {
@@ -25,6 +25,7 @@ import {
   generateInvoiceNumber,
   getCurrentFinancialYear,
   getSupplyType,
+  normalizeLineItemTaxCode,
   validateGSTIN,
 } from "@/lib/gst";
 import { validateInvoice } from "@/lib/invoiceValidation";
@@ -45,6 +46,7 @@ import {
 import { Input } from "../../../ui/input";
 import { Select } from "../../../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../ui/table";
+import HSNSearch from "../components/HSNSearch";
 
 type ChargeState = {
   amount: number;
@@ -112,6 +114,10 @@ const emptyLineItem = (gstRate = 18): LineItem => ({
   id: uid("li"),
   description: "",
   hsn: "",
+  taxCode: "",
+  taxCodeType: "HSN",
+  taxCodeSource: "LEGACY",
+  gstRateSource: "LEGACY",
   quantity: 1,
   unit: "NOS",
   unitPrice: 0,
@@ -137,6 +143,10 @@ const toLineItemsWithCharges = (state: InvoiceBuilderState): LineItem[] => {
       id: "charge-freight",
       description: "Freight / Shipping Charges",
       hsn: "9965",
+      taxCode: "9965",
+      taxCodeType: "SAC",
+      taxCodeSource: "CATALOG",
+      gstRateSource: "CATALOG",
       quantity: 1,
       unit: "NOS",
       unitPrice: state.charges.freight.amount,
@@ -151,6 +161,10 @@ const toLineItemsWithCharges = (state: InvoiceBuilderState): LineItem[] => {
       id: "charge-packing",
       description: "Packing Charges",
       hsn: "9985",
+      taxCode: "9985",
+      taxCodeType: "SAC",
+      taxCodeSource: "CATALOG",
+      gstRateSource: "CATALOG",
       quantity: 1,
       unit: "NOS",
       unitPrice: state.charges.packing.amount,
@@ -165,6 +179,10 @@ const toLineItemsWithCharges = (state: InvoiceBuilderState): LineItem[] => {
       id: "charge-other",
       description: "Other Charges",
       hsn: "9997",
+      taxCode: "9997",
+      taxCodeType: "SAC",
+      taxCodeSource: "CATALOG",
+      gstRateSource: "CATALOG",
       quantity: 1,
       unit: "NOS",
       unitPrice: state.charges.other.amount,
@@ -296,7 +314,9 @@ export default function InvoiceBuilder() {
         stateCode: existing.buyer.stateCode,
         pincode: existing.buyer.pincode,
       },
-      lineItems: parsed.normal.length ? parsed.normal : [emptyLineItem(businessMode.showTaxColumns ? 18 : 0)],
+      lineItems: parsed.normal.length
+        ? parsed.normal.map((item) => normalizeLineItemTaxCode(item))
+        : [emptyLineItem(businessMode.showTaxColumns ? 18 : 0)],
       charges: parsed.charges,
       eway: {
         eWayBillNumber: existing.eWayBillNumber ?? "",
@@ -325,7 +345,7 @@ export default function InvoiceBuilder() {
     );
   }, [parties, partyQuery]);
 
-  const allItems = useMemo(() => toLineItemsWithCharges(form), [form]);
+  const allItems = useMemo(() => toLineItemsWithCharges(form).map((item) => normalizeLineItemTaxCode(item)), [form]);
   const isInterState = useMemo(
     () => computeIsInterState(form.seller.stateCode || businessProfile.stateCode, form.buyer.stateCode || ""),
     [form.seller.stateCode, form.buyer.stateCode, businessProfile.stateCode],
@@ -457,13 +477,28 @@ export default function InvoiceBuilder() {
     }));
   };
 
-  const handleHsnChange = (itemId: string, value: string) => {
+  const handleLineItemTypeChange = (itemId: string, isService: boolean) => {
+    updateLineItem(itemId, {
+      isService,
+      taxCodeType: isService ? "SAC" : "HSN",
+    });
+  };
+
+  const handleLineItemCodeChange = (itemId: string, value: string) => {
     const normalized = value.trim().toUpperCase();
-    const matched = HSN_CODES.find((entry) => entry.code === normalized);
-    updateLineItem(
-      itemId,
-      businessMode.showTaxColumns && matched ? { hsn: matched.code, gstRate: matched.defaultGstRate } : { hsn: normalized },
-    );
+    const item = form.lineItems.find((entry) => entry.id === itemId);
+    const isService = item?.isService ?? false;
+    const matched = TAX_CODE_MASTER.find((entry) => entry.code === normalized && entry.codeType === (isService ? "SAC" : "HSN"))
+      ?? TAX_CODE_MASTER.find((entry) => entry.code === normalized);
+
+    updateLineItem(itemId, {
+      hsn: normalized,
+      taxCode: normalized,
+      taxCodeType: matched?.codeType ?? (isService ? "SAC" : "HSN"),
+      taxCodeSource: matched ? "CATALOG" : "MANUAL",
+      gstRate: businessMode.showTaxColumns && matched ? matched.defaultGstRate : item?.gstRate ?? 0,
+      gstRateSource: businessMode.showTaxColumns && matched ? "CATALOG" : item?.gstRateSource ?? "MANUAL",
+    });
   };
 
   const onGstinBlur = () => {
@@ -1132,6 +1167,7 @@ export default function InvoiceBuilder() {
                     <TableHead>Unit</TableHead>
                     <TableHead>Rate</TableHead>
                     <TableHead>Discount</TableHead>
+                    {businessMode.showHsnSac ? <TableHead>Type</TableHead> : null}
                     {businessMode.showHsnSac ? <TableHead>HSN/SAC</TableHead> : null}
                     {businessMode.showTaxColumns ? <TableHead>Taxable Value</TableHead> : null}
                     {businessMode.showTaxColumns ? <TableHead>GST%</TableHead> : null}
@@ -1227,11 +1263,35 @@ export default function InvoiceBuilder() {
                         </TableCell>
                         {businessMode.showHsnSac ? (
                           <TableCell className="min-w-28">
-                            <Input
-                              list="hsn-codes"
-                              value={item.hsn}
+                            <Select
+                              value={item.isService ? "service" : "goods"}
                               disabled={!isEditable}
-                              onChange={(e) => handleHsnChange(item.id, e.target.value)}
+                              onChange={(e) => handleLineItemTypeChange(item.id, e.target.value === "service")}
+                            >
+                              <option value="goods">Goods</option>
+                              <option value="service">Service</option>
+                            </Select>
+                          </TableCell>
+                        ) : null}
+                        {businessMode.showHsnSac ? (
+                          <TableCell className="min-w-28">
+                            <HSNSearch
+                              value={item.taxCode ?? item.hsn}
+                              codeType={item.isService ? "SAC" : "HSN"}
+                              disabled={!isEditable}
+                              onChange={(value) => handleLineItemCodeChange(item.id, value)}
+                              onRateSelect={(rate) =>
+                                updateLineItem(item.id, {
+                                  gstRate: rate,
+                                  gstRateSource: "CATALOG",
+                                })
+                              }
+                              onCodeTypeChange={(codeType) =>
+                                updateLineItem(item.id, {
+                                  isService: codeType === "SAC",
+                                  taxCodeType: codeType,
+                                })
+                              }
                             />
                           </TableCell>
                         ) : null}
@@ -1278,25 +1338,18 @@ export default function InvoiceBuilder() {
                   {issue.message}
                 </p>
               ))}
-              {businessMode.showTaxColumns ? (
-                <>
-                  {validationIssues
-                    .filter((issue) => issue.field.includes(".hsn"))
-                    .slice(0, 3)
-                    .map((issue, idx) => (
-                      <p key={`hsn-warning-${idx}`} className="mt-1 text-xs text-amber-700">
-                        {issue.message}
-                      </p>
-                    ))}
-                  <datalist id="hsn-codes">
-                    {HSN_CODES.map((code) => (
-                      <option key={code.code} value={code.code}>
-                        {code.description}
-                      </option>
-                    ))}
-                  </datalist>
-                </>
-              ) : (
+                  {businessMode.showTaxColumns ? (
+                    <>
+                      {validationIssues
+                        .filter((issue) => issue.field.includes(".hsn") || issue.field.includes(".gstRate"))
+                        .slice(0, 4)
+                        .map((issue, idx) => (
+                          <p key={`hsn-warning-${idx}`} className="mt-1 text-xs text-amber-700">
+                            {issue.message}
+                          </p>
+                        ))}
+                    </>
+                  ) : (
                 <p className="mt-2 text-xs text-muted-foreground">
                   HSN/SAC and GST rate fields are not available for this business profile.
                 </p>

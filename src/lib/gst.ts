@@ -1,5 +1,24 @@
-import { GSTIN_REGEX, INDIAN_STATES, type IndianState } from "../data/gst";
-import type { BusinessProfile, GSTREntry, Invoice, InvoiceType, LineItem, Party, TaxBreakdown } from "../data/billing";
+import {
+  GSTIN_REGEX,
+  INDIAN_STATES,
+  findTaxCodeEntry,
+  normalizeTaxCode,
+  TAX_CODE_MASTER,
+  type IndianState,
+  type TaxCodeMasterEntry,
+  type TaxCodeType,
+} from "../data/gst";
+import type {
+  BusinessProfile,
+  GSTREntry,
+  GstRateSource,
+  Invoice,
+  InvoiceType,
+  LineItem,
+  Party,
+  TaxBreakdown,
+  TaxCodeSource,
+} from "../data/billing";
 
 export interface LineItemTaxResult {
   taxableValue: number;
@@ -9,6 +28,41 @@ export interface LineItemTaxResult {
   sgstAmount: number;
   igstRate: number;
   igstAmount: number;
+}
+
+export interface TaxCodeResolution {
+  code: string;
+  codeType: TaxCodeType;
+  description: string;
+  defaultGstRate: number;
+  effectiveGstRate: number;
+  source: TaxCodeSource;
+  rateSource: GstRateSource;
+  hasCatalogMatch: boolean;
+  typeMismatch: boolean;
+  rateMismatch: boolean;
+  catalogEntry?: TaxCodeMasterEntry;
+}
+
+export interface TaxCodeSubject {
+  hsn?: string;
+  taxCode?: string;
+  taxCodeType?: TaxCodeType;
+  taxCodeSource?: TaxCodeSource;
+  gstRate?: number;
+  gstRateSource?: GstRateSource;
+  gstRateOverride?: number;
+  isService?: boolean;
+}
+
+export interface NormalizedTaxCodeSubject extends TaxCodeSubject {
+  hsn: string;
+  taxCode: string;
+  taxCodeType: TaxCodeType;
+  taxCodeSource: TaxCodeSource;
+  gstRate: number;
+  gstRateSource: GstRateSource;
+  gstRateOverride?: number;
 }
 
 export interface GSTINValidationResult {
@@ -30,6 +84,7 @@ export interface GSTRSummary {
   };
   invoiceCount: number;
   entries: GSTREntry[];
+  hsn: HsnSummaryRow[];
   gstr1: {
     b2b: {
       count: number;
@@ -71,6 +126,21 @@ export interface GSTRSummary {
   };
 }
 
+export interface HsnSummaryRow {
+  code: string;
+  codeType: TaxCodeType;
+  description: string;
+  rate: number;
+  quantity: number;
+  taxableValue: number;
+  igst: number;
+  cgst: number;
+  sgst: number;
+  cess: number;
+  totalTax: number;
+  supplyType: string;
+}
+
 const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
 const toDate = (value: string | Date): Date => {
@@ -103,14 +173,102 @@ const computeDiscountAmount = (item: LineItem, subtotal: number): number => {
   return item.discount;
 };
 
+const toTaxCodeType = (value?: TaxCodeType | string): TaxCodeType | undefined => {
+  if (value === "HSN" || value === "SAC") return value;
+  return undefined;
+};
+
+const resolveTaxCodeType = (item: TaxCodeSubject, catalogEntry?: TaxCodeMasterEntry): TaxCodeType => {
+  const explicit = toTaxCodeType(item.taxCodeType);
+  if (explicit) return explicit;
+  if (catalogEntry) return catalogEntry.codeType;
+  return item.isService ? "SAC" : "HSN";
+};
+
+export const resolveTaxCode = (item: TaxCodeSubject): TaxCodeResolution => {
+  const rawCode = normalizeTaxCode(item.taxCode ?? item.hsn ?? "");
+  const catalogByCode = rawCode ? TAX_CODE_MASTER.find((entry) => entry.code === rawCode) : undefined;
+  const catalogEntry = item.taxCodeType ? findTaxCodeEntry(rawCode, item.taxCodeType) ?? catalogByCode : catalogByCode;
+  const codeType = resolveTaxCodeType(item, catalogEntry);
+  const hasCatalogMatch = Boolean(catalogEntry);
+  const source: TaxCodeSource = item.taxCodeSource ?? (hasCatalogMatch ? "LEGACY" : rawCode ? "MANUAL" : "LEGACY");
+
+  const explicitRate = Number.isFinite(item.gstRate) ? Math.max(0, Number(item.gstRate)) : 0;
+  const rateOverride = Number.isFinite(item.gstRateOverride) ? Math.max(0, Number(item.gstRateOverride)) : undefined;
+  const defaultGstRate = catalogEntry?.defaultGstRate ?? 0;
+  const rateMismatch = hasCatalogMatch && explicitRate > 0 && Math.abs(explicitRate - defaultGstRate) > 0.01;
+  const rateSource: GstRateSource =
+    item.gstRateSource ??
+    (rateOverride !== undefined ? "OVERRIDE" : rateMismatch ? "OVERRIDE" : hasCatalogMatch ? "CATALOG" : "LEGACY");
+
+  const effectiveGstRate =
+    rateSource === "OVERRIDE" || rateSource === "MANUAL"
+      ? rateOverride ?? explicitRate
+      : hasCatalogMatch
+        ? defaultGstRate
+        : explicitRate;
+
+  const typeMismatch =
+    Boolean(catalogEntry && item.taxCodeType && item.taxCodeType !== catalogEntry.codeType) ||
+    Boolean(item.isService !== undefined && ((item.isService && codeType === "HSN") || (!item.isService && codeType === "SAC")));
+
+  return {
+    code: rawCode,
+    codeType,
+    description: catalogEntry?.description ?? "",
+    defaultGstRate,
+    effectiveGstRate,
+    source,
+    rateSource,
+    hasCatalogMatch,
+    typeMismatch,
+    rateMismatch,
+    catalogEntry,
+  };
+};
+
+export const buildResolvedTaxCode = (item: TaxCodeSubject): LineItemTaxResult & TaxCodeResolution => {
+  const resolution = resolveTaxCode(item);
+  const taxableValue = 0;
+
+  return {
+    taxableValue,
+    cgstRate: 0,
+    cgstAmount: 0,
+    sgstRate: 0,
+    sgstAmount: 0,
+    igstRate: 0,
+    igstAmount: 0,
+    ...resolution,
+  };
+};
+
+export const normalizeLineItemTaxCode = <T extends TaxCodeSubject>(item: T): T & NormalizedTaxCodeSubject => {
+  const resolution = resolveTaxCode(item);
+  const normalizedCode = resolution.code || item.taxCode || item.hsn || "";
+  const normalizedRate = resolution.effectiveGstRate;
+  return {
+    ...item,
+    hsn: normalizedCode,
+    taxCode: normalizedCode,
+    taxCodeType: resolution.codeType,
+    taxCodeSource: item.taxCodeSource ?? resolution.source,
+    gstRate: normalizedRate,
+    gstRateSource: item.gstRateSource ?? resolution.rateSource,
+    gstRateOverride:
+      resolution.rateSource === "OVERRIDE" && item.gstRateOverride === undefined ? item.gstRate ?? normalizedRate : item.gstRateOverride,
+  } as T & NormalizedTaxCodeSubject;
+};
+
 export const computeIsInterState = (sellerStateCode: string, buyerStateCode: string): boolean =>
   sellerStateCode.trim() !== buyerStateCode.trim();
 
 export const computeLineItemTax = (item: LineItem, isInterState: boolean): LineItemTaxResult => {
+  const resolution = resolveTaxCode(item);
   const subtotal = computeLineSubtotal(item);
   const discountAmount = computeDiscountAmount(item, subtotal);
   const taxableValue = round2(Math.max(0, subtotal - discountAmount));
-  const gstRate = item.gstRate;
+  const gstRate = Math.max(0, resolution.effectiveGstRate || item.gstRate || 0);
 
   if (isInterState) {
     const igstAmount = round2((taxableValue * gstRate) / 100);
@@ -363,6 +521,49 @@ const EMPTY_BUCKET = {
   cess: 0,
 };
 
+export const computeHsnSummary = (invoices: Invoice[], period?: GSTRPeriod): HsnSummaryRow[] => {
+  const eligible = invoices.filter((invoice) => {
+    if (invoice.status === "DRAFT" || invoice.status === "CANCELLED") return false;
+    if (invoice.seller.gstRegistrationStatus !== "REGISTERED" || invoice.seller.compositionScheme) return false;
+    return isDateWithinPeriod(invoice.issueDate, period);
+  });
+
+  const grouped = new Map<string, HsnSummaryRow>();
+
+  for (const invoice of eligible) {
+    const supplyType = getSupplyType(invoice.buyer, invoice.taxBreakdown.grandTotal);
+    for (const item of invoice.lineItems) {
+      const resolution = resolveTaxCode(item);
+      const line = computeLineItemTax(item, invoice.isInterState);
+      const key = `${resolution.codeType}-${resolution.code}-${Number(resolution.effectiveGstRate.toFixed(2))}-${supplyType}`;
+      const current = grouped.get(key) ?? {
+        code: resolution.code,
+        codeType: resolution.codeType,
+        description: resolution.description || item.description || "",
+        rate: round2(resolution.effectiveGstRate),
+        quantity: 0,
+        taxableValue: 0,
+        igst: 0,
+        cgst: 0,
+        sgst: 0,
+        cess: 0,
+        totalTax: 0,
+        supplyType,
+      };
+
+      current.quantity = round2(current.quantity + (Number(item.quantity) || 0));
+      current.taxableValue = round2(current.taxableValue + line.taxableValue);
+      current.igst = round2(current.igst + line.igstAmount);
+      current.cgst = round2(current.cgst + line.cgstAmount);
+      current.sgst = round2(current.sgst + line.sgstAmount);
+      current.totalTax = round2(current.totalTax + line.igstAmount + line.cgstAmount + line.sgstAmount);
+      grouped.set(key, current);
+    }
+  }
+
+  return [...grouped.values()].sort((a, b) => a.code.localeCompare(b.code) || a.supplyType.localeCompare(b.supplyType));
+};
+
 export const computeGSTRSummary = (invoices: Invoice[], period?: GSTRPeriod): GSTRSummary => {
   const eligible = invoices.filter((invoice) => {
     if (invoice.status === "DRAFT" || invoice.status === "CANCELLED") return false;
@@ -426,6 +627,7 @@ export const computeGSTRSummary = (invoices: Invoice[], period?: GSTRPeriod): GS
     },
     invoiceCount: entries.length,
     entries,
+    hsn: computeHsnSummary(invoices, period),
     gstr1: {
       b2b,
       b2cl,

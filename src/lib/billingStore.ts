@@ -7,12 +7,14 @@ import type {
   LineItem,
   Party,
   Payment,
+  PurchaseITCEntry,
 } from "../data/billing";
 import {
   computeInvoiceTotalsForProfile,
   computeIsInterState,
   generateInvoiceNumber,
   getCurrentFinancialYear,
+  normalizeLineItemTaxCode,
 } from "./gst";
 import { attachMockEInvoice } from "./mockEInvoice";
 
@@ -37,6 +39,7 @@ type BillingStoreValue = {
   parties: Party[];
   businessProfile: BusinessProfile;
   payments: Payment[];
+  purchaseItcEntries: PurchaseITCEntry[];
   invoiceSequences: InvoiceSequences;
   getInvoicePaymentMeta: (invoice: Invoice, today?: Date) => { isOverdue: boolean; displayStatus: InvoiceStatus };
   createInvoice: (invoice: CreateInvoiceInput) => Invoice;
@@ -47,6 +50,9 @@ type BillingStoreValue = {
   saveParty: (party: Party) => void;
   updateBusinessProfile: (profile: BusinessProfile) => void;
   getNextSequence: (type: InvoiceType, financialYear: string) => number;
+  addPurchaseItcEntry: (entry: Omit<PurchaseITCEntry, "id"> & { id?: string }) => PurchaseITCEntry;
+  updatePurchaseItcEntry: (entry: PurchaseITCEntry) => void;
+  removePurchaseItcEntry: (entryId: string) => void;
 };
 
 const BillingStoreContext = createContext<BillingStoreValue | null>(null);
@@ -242,17 +248,22 @@ const makeLineItem = (
   unitPrice: number,
   gstRate: number,
   discount = 0,
+  isService = false,
 ): LineItem => ({
   id,
   description,
   hsn,
+  taxCode: hsn,
+  taxCodeType: isService ? "SAC" : "HSN",
+  taxCodeSource: "CATALOG",
+  gstRateSource: "CATALOG",
   quantity,
   unit: "NOS",
   unitPrice,
   discount,
   discountType: "flat",
   gstRate,
-  isService: false,
+  isService,
 });
 
 const toPaymentStatus = (amountPaid: number, grandTotal: number): InvoiceStatus => {
@@ -281,7 +292,8 @@ const buildInvoice = (args: {
   const financialYear = getCurrentFinancialYear(args.issueDate);
   const seller = args.seller ?? SEED_BUSINESS_PROFILE;
   const isInterState = computeIsInterState(seller.stateCode, args.buyer.stateCode);
-  const taxBreakdown = computeInvoiceTotalsForProfile(args.lineItems, isInterState, seller);
+  const normalizedLineItems = args.lineItems.map((item) => normalizeLineItemTaxCode(item));
+  const taxBreakdown = computeInvoiceTotalsForProfile(normalizedLineItems, isInterState, seller);
   const amountPaid = Math.min(args.amountPaid ?? 0, taxBreakdown.grandTotal);
   const status =
     args.status === "FINALIZED" && amountPaid > 0 ? toPaymentStatus(amountPaid, taxBreakdown.grandTotal) : args.status;
@@ -296,7 +308,7 @@ const buildInvoice = (args: {
     supplyDate: args.supplyDate,
     seller,
     buyer: args.buyer,
-    lineItems: args.lineItems,
+    lineItems: normalizedLineItems,
     taxBreakdown,
     isInterState,
     isRCM: false,
@@ -501,7 +513,7 @@ const SEED_INVOICES: Invoice[] = [
     status: "FINALIZED",
     buyer: findParty("pty-neelam-kitchens"),
     ...DEMO_RECORDED_LINKS["inv-011"],
-    lineItems: [makeLineItem("li-20", "Rate Difference Adjustment", "9961", 1, 15000, 18)],
+    lineItems: [makeLineItem("li-20", "Rate Difference Adjustment", "9961", 1, 15000, 18, 0, true)],
     linkedInvoiceId: "inv-002",
     notes: "Credit note issued for damaged cookware batch return.",
   }),
@@ -515,7 +527,7 @@ const SEED_INVOICES: Invoice[] = [
     status: "FINALIZED",
     buyer: findParty("pty-royal-retail"),
     ...DEMO_RECORDED_LINKS["inv-012"],
-    lineItems: [makeLineItem("li-21", "Freight and Packing Recovery", "9965", 1, 8500, 18)],
+    lineItems: [makeLineItem("li-21", "Freight and Packing Recovery", "9965", 1, 8500, 18, 0, true)],
     linkedInvoiceId: "inv-001",
     notes: "Debit note raised toward additional logistics charge.",
   }),
@@ -579,6 +591,41 @@ const initialPayments: Payment[] = [
   },
 ];
 
+const SEED_PURCHASE_ITC_ENTRIES: PurchaseITCEntry[] = [
+  {
+    id: "itc-001",
+    supplierName: "Global Packaging Supplies",
+    gstin: "27AABCG1122H1Z3",
+    invoiceNumber: "PUR/2025-26/001",
+    invoiceDate: "2025-04-18",
+    placeOfSupply: "Maharashtra",
+    hsn: "9985",
+    taxCodeType: "SAC",
+    taxableValue: 42000,
+    igst: 0,
+    cgst: 3780,
+    sgst: 3780,
+    cess: 0,
+    notes: "Packaging services for April outbound dispatches.",
+  },
+  {
+    id: "itc-002",
+    supplierName: "Transit Logistics Pvt Ltd",
+    gstin: "27AAFCT3344K1Z7",
+    invoiceNumber: "PUR/2025-26/002",
+    invoiceDate: "2025-05-11",
+    placeOfSupply: "Maharashtra",
+    hsn: "9965",
+    taxCodeType: "SAC",
+    taxableValue: 88000,
+    igst: 0,
+    cgst: 7920,
+    sgst: 7920,
+    cess: 0,
+    notes: "Freight credit captured from inbound logistics invoices.",
+  },
+];
+
 const INVOICE_SEQUENCES: InvoiceSequences = {
   TAX_INVOICE: { "2025-26": 9 },
   PROFORMA: { "2025-26": 1 },
@@ -587,6 +634,7 @@ const INVOICE_SEQUENCES: InvoiceSequences = {
 };
 
 const BUSINESS_PROFILE_STORAGE_KEY = "demo-ecom.businessProfile";
+const PURCHASE_ITC_STORAGE_KEY = "demo-ecom.purchaseItcEntries";
 
 const readStoredBusinessProfile = (): BusinessProfile | null => {
   if (typeof window === "undefined") return null;
@@ -609,6 +657,27 @@ const writeStoredBusinessProfile = (profile: BusinessProfile) => {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(BUSINESS_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch {
+    // Ignore storage failures in demo mode.
+  }
+};
+
+const readStoredPurchaseItcEntries = (): PurchaseITCEntry[] | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PURCHASE_ITC_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PurchaseITCEntry[] | null;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredPurchaseItcEntries = (entries: PurchaseITCEntry[]) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PURCHASE_ITC_STORAGE_KEY, JSON.stringify(entries));
   } catch {
     // Ignore storage failures in demo mode.
   }
@@ -677,6 +746,9 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
   const [parties, setParties] = useState<Party[]>(INITIAL_PARTIES);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(() => readStoredBusinessProfile() ?? DEFAULT_BUSINESS_PROFILE);
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
+  const [purchaseItcEntries, setPurchaseItcEntries] = useState<PurchaseITCEntry[]>(
+    () => readStoredPurchaseItcEntries() ?? SEED_PURCHASE_ITC_ENTRIES,
+  );
   const [invoiceSequences, setInvoiceSequences] = useState<InvoiceSequences>(INVOICE_SEQUENCES);
 
   const value = useMemo<BillingStoreValue>(
@@ -685,6 +757,7 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
       parties,
       businessProfile,
       payments,
+      purchaseItcEntries,
       invoiceSequences,
       getInvoicePaymentMeta: (invoice, today = new Date()) =>
         deriveInvoicePaymentMeta(
@@ -726,8 +799,9 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
           },
         }));
 
+        const normalizedLineItems = invoice.lineItems.map((item) => normalizeLineItemTaxCode(item));
         const isInterState = computeIsInterState(invoice.seller.stateCode, invoice.buyer.stateCode);
-        const taxBreakdown = computeInvoiceTotalsForProfile(invoice.lineItems, isInterState, invoice.seller);
+        const taxBreakdown = computeInvoiceTotalsForProfile(normalizedLineItems, isInterState, invoice.seller);
         const created: Invoice = {
           ...invoice,
           id,
@@ -735,6 +809,7 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
           financialYear,
           taxBreakdown,
           isInterState,
+          lineItems: normalizedLineItems,
           paymentHistory: [],
           amountPaid: 0,
           balanceDue: taxBreakdown.grandTotal,
@@ -752,10 +827,12 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
             if (existing.id !== invoice.id) return existing;
             if (existing.status !== "DRAFT") return existing;
 
+            const normalizedLineItems = invoice.lineItems.map((item) => normalizeLineItemTaxCode(item));
             const isInterState = computeIsInterState(invoice.seller.stateCode, invoice.buyer.stateCode);
-            const taxBreakdown = computeInvoiceTotalsForProfile(invoice.lineItems, isInterState, invoice.seller);
+            const taxBreakdown = computeInvoiceTotalsForProfile(normalizedLineItems, isInterState, invoice.seller);
             return {
               ...invoice,
+              lineItems: normalizedLineItems,
               isInterState,
               taxBreakdown,
               balanceDue: Math.max(0, Number((taxBreakdown.grandTotal - existing.amountPaid).toFixed(2))),
@@ -838,8 +915,42 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
         setBusinessProfile(profile);
         writeStoredBusinessProfile(profile);
       },
+      addPurchaseItcEntry: (entryInput) => {
+        const entry: PurchaseITCEntry = {
+          ...entryInput,
+          id: entryInput.id ?? `itc-${Date.now().toString(36)}`,
+          hsn: entryInput.hsn?.trim().toUpperCase() || undefined,
+        };
+        setPurchaseItcEntries((prev) => {
+          const next = [entry, ...prev.filter((item) => item.id !== entry.id)];
+          writeStoredPurchaseItcEntries(next);
+          return next;
+        });
+        return entry;
+      },
+      updatePurchaseItcEntry: (entry) => {
+        setPurchaseItcEntries((prev) => {
+          const next = prev.map((item) =>
+            item.id === entry.id
+              ? {
+                  ...entry,
+                  hsn: entry.hsn?.trim().toUpperCase() || undefined,
+                }
+              : item,
+          );
+          writeStoredPurchaseItcEntries(next);
+          return next;
+        });
+      },
+      removePurchaseItcEntry: (entryId) => {
+        setPurchaseItcEntries((prev) => {
+          const next = prev.filter((item) => item.id !== entryId);
+          writeStoredPurchaseItcEntries(next);
+          return next;
+        });
+      },
     }),
-    [invoices, parties, businessProfile, payments, invoiceSequences],
+    [invoices, parties, businessProfile, payments, purchaseItcEntries, invoiceSequences],
   );
 
   return createElement(BillingStoreContext.Provider, { value }, children);

@@ -19,7 +19,14 @@ const INITIAL_PRODUCTS: Product[] = mockProducts.map((product) => ({
   image: product.image,
   images: [product.image],
   variants: [],
-  featured: false
+  featured: false,
+  hsn: product.hsn,
+  taxCode: product.taxCode ?? product.hsn,
+  taxCodeType: product.taxCodeType ?? (product.isService ? 'SAC' : 'HSN'),
+  taxCodeSource: product.taxCodeSource ?? 'LEGACY',
+  gstRateSource: product.gstRateSource ?? 'LEGACY',
+  gstRateOverride: product.gstRateOverride,
+  isService: Boolean(product.isService)
 }))
 
 const INITIAL_ORDERS: Order[] = mockOrders.map((order) => {

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, CheckCircle2, Copy, Download, Share2 } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { getBusinessModeConfig } from "@/lib/businessMode";
-import { computeLineItemTax, amountInWords } from "@/lib/gst";
+import { amountInWords, computeLineItemTax, resolveTaxCode } from "@/lib/gst";
 import { copyCurrentUrl, printCurrentPage } from "@/lib/pdfExport";
 import { useBillingStore } from "@/lib/billingStore";
 import { cn } from "@/lib/utils";
@@ -50,11 +50,12 @@ export default function InvoicePreview() {
 
   const lineRows = invoice.lineItems.map((item) => {
     const tax = computeLineItemTax(item, invoice.isInterState);
+    const resolution = resolveTaxCode(item);
     const gross = item.quantity * item.unitPrice;
     const total = businessMode?.showTaxColumns
       ? tax.taxableValue + tax.cgstAmount + tax.sgstAmount + tax.igstAmount
       : tax.taxableValue;
-    return { item, tax, gross, total };
+    return { item, tax, gross, total, resolution };
   });
 
   const copyShareLink = async () => {
@@ -258,7 +259,11 @@ export default function InvoicePreview() {
                   <td className="border px-2 py-1 text-right">{row.item.quantity}</td>
                   <td className="border px-2 py-1">{row.item.unit}</td>
                   <td className="border px-2 py-1 text-right">{MONEY.format(row.item.unitPrice)}</td>
-                  {businessMode?.showHsnSac ? <td className="border px-2 py-1">{row.item.hsn || "-"}</td> : null}
+                  {businessMode?.showHsnSac ? (
+                    <td className="border px-2 py-1">
+                      {row.resolution.code ? `${row.resolution.codeType} ${row.resolution.code}` : row.item.hsn || "-"}
+                    </td>
+                  ) : null}
                   {businessMode?.showTaxColumns ? <td className="border px-2 py-1 text-right">{MONEY.format(row.tax.taxableValue)}</td> : null}
                   {businessMode?.showTaxColumns ? <td className="border px-2 py-1 text-right">{row.item.gstRate}%</td> : null}
                   {businessMode?.showTaxColumns ? (

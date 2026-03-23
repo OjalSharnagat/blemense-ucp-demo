@@ -27,34 +27,54 @@ export const GST_RATES: Record<GSTRateLabel, number> = {
   "28%": 28,
 };
 
-export interface HSNCode {
+export type TaxCodeType = "HSN" | "SAC";
+
+export interface TaxCodeMasterEntry {
   code: string;
+  codeType: TaxCodeType;
   description: string;
   defaultGstRate: number;
+  cessRate?: number;
+  uqc?: string;
 }
 
-export const HSN_CODES: HSNCode[] = [
-  { code: "9403", description: "Other furniture and parts (home goods)", defaultGstRate: 18 },
-  { code: "7323", description: "Table, kitchen or other household articles of iron/steel", defaultGstRate: 18 },
-  { code: "9405", description: "Lamps and lighting fittings", defaultGstRate: 12 },
-  { code: "3924", description: "Plastic household and toilet articles", defaultGstRate: 18 },
-  { code: "6912", description: "Ceramic tableware, kitchenware and household articles", defaultGstRate: 12 },
-  { code: "6302", description: "Bed linen, table linen, toilet and kitchen linen", defaultGstRate: 5 },
-  { code: "5703", description: "Carpets and textile floor coverings", defaultGstRate: 12 },
-  { code: "7013", description: "Glassware used for table, kitchen or indoor decoration", defaultGstRate: 18 },
-  { code: "4818", description: "Toilet paper, tissues, towels and similar household paper", defaultGstRate: 12 },
-  { code: "3307", description: "Room deodorizers, perfumed preparations", defaultGstRate: 18 },
-  { code: "8509", description: "Electro-mechanical domestic appliances", defaultGstRate: 18 },
-  { code: "8516", description: "Electric instantaneous/storage water heaters and heating apparatus", defaultGstRate: 18 },
-  { code: "4202", description: "Travel goods, handbags and similar containers", defaultGstRate: 18 },
-  { code: "6111", description: "Babies' garments and clothing accessories, knitted/crocheted", defaultGstRate: 12 },
-  { code: "6203", description: "Men's or boys' suits, jackets, trousers and similar apparel", defaultGstRate: 12 },
-  { code: "6204", description: "Women's or girls' suits, dresses, skirts and similar apparel", defaultGstRate: 12 },
-  { code: "9503", description: "Toys, including scale models and puzzles", defaultGstRate: 12 },
-  { code: "9506", description: "Sports goods and equipment", defaultGstRate: 12 },
-  { code: "8211", description: "Knives with cutting blades and related tools", defaultGstRate: 18 },
-  { code: "4421", description: "Other articles of wood", defaultGstRate: 18 },
+export const TAX_CODE_MASTER: TaxCodeMasterEntry[] = [
+  { code: "9403", codeType: "HSN", description: "Other furniture and parts (home goods)", defaultGstRate: 18 },
+  { code: "7323", codeType: "HSN", description: "Table, kitchen or other household articles of iron/steel", defaultGstRate: 18 },
+  { code: "9405", codeType: "HSN", description: "Lamps and lighting fittings", defaultGstRate: 12 },
+  { code: "3924", codeType: "HSN", description: "Plastic household and toilet articles", defaultGstRate: 18 },
+  { code: "6912", codeType: "HSN", description: "Ceramic tableware, kitchenware and household articles", defaultGstRate: 12 },
+  { code: "6302", codeType: "HSN", description: "Bed linen, table linen, toilet and kitchen linen", defaultGstRate: 5 },
+  { code: "5703", codeType: "HSN", description: "Carpets and textile floor coverings", defaultGstRate: 12 },
+  { code: "7013", codeType: "HSN", description: "Glassware used for table, kitchen or indoor decoration", defaultGstRate: 18 },
+  { code: "7009", codeType: "HSN", description: "Glass mirrors, whether or not framed", defaultGstRate: 18 },
+  { code: "4818", codeType: "HSN", description: "Toilet paper, tissues, towels and similar household paper", defaultGstRate: 12 },
+  { code: "3307", codeType: "HSN", description: "Room deodorizers, perfumed preparations", defaultGstRate: 18 },
+  { code: "8509", codeType: "HSN", description: "Electro-mechanical domestic appliances", defaultGstRate: 18 },
+  { code: "8516", codeType: "HSN", description: "Electric instantaneous/storage water heaters and heating apparatus", defaultGstRate: 18 },
+  { code: "4202", codeType: "HSN", description: "Travel goods, handbags and similar containers", defaultGstRate: 18 },
+  { code: "6111", codeType: "HSN", description: "Babies' garments and clothing accessories, knitted/crocheted", defaultGstRate: 12 },
+  { code: "6203", codeType: "HSN", description: "Men's or boys' suits, jackets, trousers and similar apparel", defaultGstRate: 12 },
+  { code: "6204", codeType: "HSN", description: "Women's or girls' suits, dresses, skirts and similar apparel", defaultGstRate: 12 },
+  { code: "9503", codeType: "HSN", description: "Toys, including scale models and puzzles", defaultGstRate: 12 },
+  { code: "9506", codeType: "HSN", description: "Sports goods and equipment", defaultGstRate: 12 },
+  { code: "8211", codeType: "HSN", description: "Knives with cutting blades and related tools", defaultGstRate: 18 },
+  { code: "4421", codeType: "HSN", description: "Other articles of wood", defaultGstRate: 18 },
+  { code: "9961", codeType: "SAC", description: "Support services for the transport of goods", defaultGstRate: 18 },
+  { code: "9965", codeType: "SAC", description: "Freight transport services", defaultGstRate: 18 },
+  { code: "9985", codeType: "SAC", description: "Packing and packaging services", defaultGstRate: 18 },
+  { code: "9997", codeType: "SAC", description: "Other services not elsewhere classified", defaultGstRate: 18 },
 ];
+
+export const HSN_CODES = TAX_CODE_MASTER.filter((entry) => entry.codeType === "HSN");
+export const SAC_CODES = TAX_CODE_MASTER.filter((entry) => entry.codeType === "SAC");
+
+export const findTaxCodeEntry = (code: string, codeType?: TaxCodeType): TaxCodeMasterEntry | undefined => {
+  const normalized = code.trim().toUpperCase();
+  return TAX_CODE_MASTER.find((entry) => entry.code === normalized && (!codeType || entry.codeType === codeType));
+};
+
+export const normalizeTaxCode = (value: string): string => value.trim().toUpperCase();
 
 export interface IndianState {
   code: string;

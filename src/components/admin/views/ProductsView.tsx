@@ -3,6 +3,7 @@ import { Archive, ChevronDown, ChevronUp, Edit, PackageSearch, Plus } from 'luci
 import type { Product } from '../../../utils'
 import { fmt, getPrimaryImage, uid } from '../../../utils'
 import { useAdminStore } from '@/lib/store'
+import { TAX_CODE_MASTER } from '@/data/gst'
 import { Badge } from '../../ui/badge'
 import { Button } from '../../ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '../../ui/card'
@@ -24,6 +25,12 @@ type ProductFormValues = {
   status: 'active' | 'draft' | 'archived'
   description: string
   hsn: string
+  isService: boolean
+  taxCode?: string
+  taxCodeType?: 'HSN' | 'SAC'
+  taxCodeSource?: 'CATALOG' | 'MANUAL' | 'LEGACY'
+  gstRateSource?: 'CATALOG' | 'MANUAL' | 'OVERRIDE' | 'LEGACY'
+  gstRateOverride?: number
   gstRate: number
 }
 
@@ -111,11 +118,21 @@ export default function ProductsView() {
   }
 
   function handleSave(values: ProductFormValues) {
+    const normalizedCode = values.hsn.trim().toUpperCase()
+    const matched = TAX_CODE_MASTER.find((entry) => entry.code === normalizedCode)
     if (editingProduct) {
       updateProduct({
         ...editingProduct,
         ...values,
-        status: values.status
+        status: values.status,
+        hsn: normalizedCode,
+        taxCode: normalizedCode,
+        taxCodeType: matched?.codeType ?? (values.isService ? 'SAC' : 'HSN'),
+        taxCodeSource: matched ? 'CATALOG' : 'MANUAL',
+        gstRateSource: matched ? 'CATALOG' : 'MANUAL',
+        isService: values.isService,
+        gstRate: Math.max(0, Number(values.gstRate) || 0),
+        gstRateOverride: matched && Math.abs((Number(values.gstRate) || 0) - matched.defaultGstRate) > 0.01 ? Number(values.gstRate) : undefined
       })
     } else {
       addProduct({
@@ -133,8 +150,14 @@ export default function ProductsView() {
         images: ['https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=80&h=80&fit=crop'],
         variants: [],
         featured: false,
-        hsn: values.hsn.trim().toUpperCase(),
-        gstRate: Math.max(0, Number(values.gstRate) || 0)
+        hsn: normalizedCode,
+        taxCode: normalizedCode,
+        taxCodeType: matched?.codeType ?? (values.isService ? 'SAC' : 'HSN'),
+        taxCodeSource: matched ? 'CATALOG' : 'MANUAL',
+        gstRateSource: matched ? 'CATALOG' : 'MANUAL',
+        isService: values.isService,
+        gstRate: Math.max(0, Number(values.gstRate) || 0),
+        gstRateOverride: matched && Math.abs((Number(values.gstRate) || 0) - matched.defaultGstRate) > 0.01 ? Number(values.gstRate) : undefined
       })
     }
 

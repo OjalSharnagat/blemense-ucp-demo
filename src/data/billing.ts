@@ -1,9 +1,13 @@
+import type { TaxCodeType } from "./gst";
+
 export type BusinessType = "PROPRIETORSHIP" | "PARTNERSHIP" | "PRIVATE_LIMITED" | "LLP" | "OTHER";
 export type GSTRegistrationType = "REGULAR" | "COMPOSITION" | "CASUAL" | "SEZ";
 export type GSTRegistrationStatus = "REGISTERED" | "UNREGISTERED";
 export type BusinessScale = "FREELANCER" | "SMALL" | "GROWING" | "ESTABLISHED";
 export type BusinessCategory = "GOODS" | "SERVICES" | "BOTH";
 export type PriceDisplayMode = "INCLUSIVE" | "EXCLUSIVE";
+export type TaxCodeSource = "CATALOG" | "MANUAL" | "LEGACY";
+export type GstRateSource = "CATALOG" | "MANUAL" | "OVERRIDE" | "LEGACY";
 
 export interface BusinessProfile {
   gstRegistrationStatus: GSTRegistrationStatus;
@@ -63,6 +67,11 @@ export interface LineItem {
   id: string;
   description: string;
   hsn: string;
+  taxCode?: string;
+  taxCodeType?: TaxCodeType;
+  taxCodeSource?: TaxCodeSource;
+  gstRateSource?: GstRateSource;
+  gstRateOverride?: number;
   quantity: number;
   unit: LineItemUnit;
   unitPrice: number;
@@ -147,6 +156,7 @@ export interface Invoice {
   irnAcknowledgementNumber?: string;
   irnAcknowledgementDate?: string;
   irnQrCodeDataUrl?: string;
+  mockEInvoicePayload?: MockEInvoicePayload;
   paymentHistory: Payment[];
   amountPaid: number;
   balanceDue: number;
@@ -168,4 +178,42 @@ export interface GSTREntry {
   sgst: number;
   cess: number;
   supplyType: string;
+}
+
+export interface MockEInvoiceLineItem {
+  description: string;
+  taxCode: string;
+  taxCodeType?: TaxCodeType;
+  hsn?: string;
+  quantity: number;
+  unitPrice: number;
+  gstRate: number;
+  taxableValue: number;
+  taxAmount: number;
+}
+
+export interface MockEInvoicePayload {
+  lineItems: MockEInvoiceLineItem[];
+  totals: {
+    taxableValue: number;
+    totalTax: number;
+    grandTotal: number;
+  };
+}
+
+export interface PurchaseITCEntry {
+  id: string;
+  supplierName: string;
+  gstin?: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  placeOfSupply: string;
+  hsn?: string;
+  taxCodeType?: TaxCodeType;
+  taxableValue: number;
+  igst: number;
+  cgst: number;
+  sgst: number;
+  cess: number;
+  notes?: string;
 }

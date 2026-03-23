@@ -3,12 +3,13 @@ import { ChevronDown, ChevronUp, Download } from "lucide-react";
 import type { Invoice, LineItem } from "@/data/billing";
 import { getBusinessModeConfig } from "@/lib/businessMode";
 import { useBillingStore } from "@/lib/billingStore";
-import { computeLineItemTax } from "@/lib/gst";
+import { computeHsnSummary, computeLineItemTax, resolveTaxCode } from "@/lib/gst";
 import { downloadJsonFile } from "@/lib/pdfExport";
 import { Link } from "react-router-dom";
 import { Badge } from "../../../ui/badge";
 import { Button } from "../../../ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../ui/card";
+import { Input } from "../../../ui/input";
 import { Select } from "../../../ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../ui/table";
 
@@ -48,7 +49,7 @@ const getTaxLines = (invoice: Invoice): TaxLine[] => {
   const byRate = new Map<number, TaxRollup>();
   for (const item of invoice.lineItems) {
     const line = computeLineItemTax(item, invoice.isInterState);
-    const rate = Number(item.gstRate.toFixed(2));
+    const rate = Number(resolveTaxCode(item).effectiveGstRate.toFixed(2));
     const current = byRate.get(rate) ?? { taxable: 0, igst: 0, cgst: 0, sgst: 0 };
     current.taxable += line.taxableValue;
     current.igst += line.igstAmount;
@@ -68,7 +69,7 @@ const getTaxLines = (invoice: Invoice): TaxLine[] => {
 const getLineSign = (type: Invoice["type"]): number => (type === "CREDIT_NOTE" ? -1 : 1);
 
 export default function GSTReturnsView() {
-  const { invoices, businessProfile } = useBillingStore();
+  const { invoices, businessProfile, purchaseItcEntries, addPurchaseItcEntry, removePurchaseItcEntry } = useBillingStore();
   const businessMode = getBusinessModeConfig(businessProfile);
 
   if (!businessMode.showGstReturns) {
@@ -110,6 +111,21 @@ export default function GSTReturnsView() {
     s7: true,
     s9b: true,
   });
+  const today = new Date().toISOString().slice(0, 10);
+  const [itcForm, setItcForm] = useState({
+    supplierName: "",
+    gstin: "",
+    invoiceNumber: "",
+    invoiceDate: today,
+    placeOfSupply: businessProfile.state,
+    hsn: "",
+    taxableValue: 0,
+    igst: 0,
+    cgst: 0,
+    sgst: 0,
+    cess: 0,
+    notes: "",
+  });
 
   const fp = `${String(selectedMonth).padStart(2, "0")}${selectedYear}`;
 
@@ -121,6 +137,29 @@ export default function GSTReturnsView() {
         return supplyDate.getMonth() + 1 === selectedMonth && supplyDate.getFullYear() === selectedYear;
       }),
     [invoices, selectedMonth, selectedYear],
+  );
+
+  const periodPurchaseItcEntries = useMemo(
+    () =>
+      purchaseItcEntries.filter((entry) => {
+        const date = parseDate(entry.invoiceDate);
+        return date.getMonth() + 1 === selectedMonth && date.getFullYear() === selectedYear;
+      }),
+    [purchaseItcEntries, selectedMonth, selectedYear],
+  );
+
+  const purchaseItcTotals = useMemo(
+    () =>
+      periodPurchaseItcEntries.reduce(
+        (acc, entry) => ({
+          igst: round2(acc.igst + Number(entry.igst || 0)),
+          cgst: round2(acc.cgst + Number(entry.cgst || 0)),
+          sgst: round2(acc.sgst + Number(entry.sgst || 0)),
+          cess: round2(acc.cess + Number(entry.cess || 0)),
+        }),
+        { igst: 0, cgst: 0, sgst: 0, cess: 0 },
+      ),
+    [periodPurchaseItcEntries],
   );
 
   const b2bRows = useMemo(() => {
@@ -319,7 +358,7 @@ export default function GSTReturnsView() {
       const sign = getLineSign(invoice.type);
       for (const item of invoice.lineItems) {
         const line = computeLineItemTax(item, invoice.isInterState);
-        if (item.gstRate <= 0) {
+        if (line.igstAmount + line.cgstAmount + line.sgstAmount <= 0) {
           nilExempt += sign * line.taxableValue;
           continue;
         }
@@ -340,6 +379,12 @@ export default function GSTReturnsView() {
     const zeroRated = 0;
     const nonGst = 0;
     const outwardTotal = taxable + zeroRated + nilExempt + nonGst;
+    const netTaxPayable = {
+      igst: round2(Math.max(0, taxableI - purchaseItcTotals.igst)),
+      cgst: round2(Math.max(0, taxableC - purchaseItcTotals.cgst)),
+      sgst: round2(Math.max(0, taxableS - purchaseItcTotals.sgst)),
+      cess: 0,
+    };
 
     return {
       section31: {
@@ -363,13 +408,46 @@ export default function GSTReturnsView() {
         nonGst: round2(nonGst),
       },
       taxPayable: {
-        igst: round2(taxableI),
-        cgst: round2(taxableC),
-        sgst: round2(taxableS),
-        total: round2(taxableI + taxableC + taxableS),
+        igst: netTaxPayable.igst,
+        cgst: netTaxPayable.cgst,
+        sgst: netTaxPayable.sgst,
+        total: round2(netTaxPayable.igst + netTaxPayable.cgst + netTaxPayable.sgst + netTaxPayable.cess),
       },
     };
-  }, [periodInvoices]);
+  }, [periodInvoices, purchaseItcTotals.igst, purchaseItcTotals.cgst, purchaseItcTotals.sgst, purchaseItcTotals.cess]);
+
+  const handleAddPurchaseItcEntry = () => {
+    if (!itcForm.supplierName.trim() || !itcForm.invoiceNumber.trim()) return;
+    addPurchaseItcEntry({
+      supplierName: itcForm.supplierName.trim(),
+      gstin: itcForm.gstin.trim() || undefined,
+      invoiceNumber: itcForm.invoiceNumber.trim(),
+      invoiceDate: itcForm.invoiceDate,
+      placeOfSupply: itcForm.placeOfSupply.trim() || businessProfile.state,
+      hsn: itcForm.hsn.trim().toUpperCase() || undefined,
+      taxCodeType: itcForm.hsn.trim() ? (itcForm.hsn.trim().startsWith("99") ? "SAC" : "HSN") : undefined,
+      taxableValue: Math.max(0, Number(itcForm.taxableValue) || 0),
+      igst: Math.max(0, Number(itcForm.igst) || 0),
+      cgst: Math.max(0, Number(itcForm.cgst) || 0),
+      sgst: Math.max(0, Number(itcForm.sgst) || 0),
+      cess: Math.max(0, Number(itcForm.cess) || 0),
+      notes: itcForm.notes.trim(),
+    });
+    setItcForm({
+      supplierName: "",
+      gstin: "",
+      invoiceNumber: "",
+      invoiceDate: today,
+      placeOfSupply: businessProfile.state,
+      hsn: "",
+      taxableValue: 0,
+      igst: 0,
+      cgst: 0,
+      sgst: 0,
+      cess: 0,
+      notes: "",
+    });
+  };
 
   const gstr1Json = useMemo(() => {
     const b2bMap = new Map<
@@ -513,7 +591,7 @@ export default function GSTReturnsView() {
       b2cs,
       cdnr: [...cdnrMap.values()],
       doc_issue: [],
-      hsn: [],
+      hsn: computeHsnSummary(periodInvoices),
     };
   }, [b2bRows, b2clRows, b2csRows, noteRows, businessProfile.gstin, fp, periodInvoices]);
 
@@ -543,7 +621,13 @@ export default function GSTReturnsView() {
         { ty: "IMPS", iamt: 0, camt: 0, samt: 0, csamt: 0 },
         { ty: "ISRC", iamt: 0, camt: 0, samt: 0, csamt: 0 },
         { ty: "ISD", iamt: 0, camt: 0, samt: 0, csamt: 0 },
-        { ty: "OTH", iamt: 0, camt: 0, samt: 0, csamt: 0 },
+        {
+          ty: "OTH",
+          iamt: purchaseItcTotals.igst,
+          camt: purchaseItcTotals.cgst,
+          samt: purchaseItcTotals.sgst,
+          csamt: purchaseItcTotals.cess,
+        },
       ],
       inward_sup: {
         isup_details: [
@@ -562,7 +646,7 @@ export default function GSTReturnsView() {
         sgst: gstr3b.taxPayable.sgst,
       },
     }),
-    [businessProfile.gstin, fp, gstr3b],
+    [businessProfile.gstin, fp, gstr3b, purchaseItcTotals],
   );
 
   const renderSectionHeader = (id: keyof typeof sections, title: string) => (
@@ -919,8 +1003,109 @@ export default function GSTReturnsView() {
             <CardHeader>
               <CardTitle className="text-base">4 — ITC Available</CardTitle>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              ITC from purchase invoices — enter manually
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Supplier Name</p>
+                  <Input value={itcForm.supplierName} onChange={(e) => setItcForm((prev) => ({ ...prev, supplierName: e.target.value }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Invoice Number</p>
+                  <Input value={itcForm.invoiceNumber} onChange={(e) => setItcForm((prev) => ({ ...prev, invoiceNumber: e.target.value }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Invoice Date</p>
+                  <Input type="date" value={itcForm.invoiceDate} onChange={(e) => setItcForm((prev) => ({ ...prev, invoiceDate: e.target.value }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">GSTIN</p>
+                  <Input value={itcForm.gstin} onChange={(e) => setItcForm((prev) => ({ ...prev, gstin: e.target.value.toUpperCase() }))} placeholder="Optional" />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Place of Supply</p>
+                  <Input value={itcForm.placeOfSupply} onChange={(e) => setItcForm((prev) => ({ ...prev, placeOfSupply: e.target.value }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">HSN / SAC</p>
+                  <Input value={itcForm.hsn} onChange={(e) => setItcForm((prev) => ({ ...prev, hsn: e.target.value.toUpperCase() }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">Taxable Value</p>
+                  <Input type="number" min={0} step="0.01" value={itcForm.taxableValue} onChange={(e) => setItcForm((prev) => ({ ...prev, taxableValue: Number(e.target.value) }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">IGST</p>
+                  <Input type="number" min={0} step="0.01" value={itcForm.igst} onChange={(e) => setItcForm((prev) => ({ ...prev, igst: Number(e.target.value) }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">CGST</p>
+                  <Input type="number" min={0} step="0.01" value={itcForm.cgst} onChange={(e) => setItcForm((prev) => ({ ...prev, cgst: Number(e.target.value) }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">SGST</p>
+                  <Input type="number" min={0} step="0.01" value={itcForm.sgst} onChange={(e) => setItcForm((prev) => ({ ...prev, sgst: Number(e.target.value) }))} />
+                </div>
+                <div>
+                  <p className="mb-1 text-xs text-muted-foreground">CESS</p>
+                  <Input type="number" min={0} step="0.01" value={itcForm.cess} onChange={(e) => setItcForm((prev) => ({ ...prev, cess: Number(e.target.value) }))} />
+                </div>
+                <div className="md:col-span-3">
+                  <p className="mb-1 text-xs text-muted-foreground">Notes</p>
+                  <Input value={itcForm.notes} onChange={(e) => setItcForm((prev) => ({ ...prev, notes: e.target.value }))} placeholder="Optional note" />
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" onClick={handleAddPurchaseItcEntry}>
+                  Add ITC Entry
+                </Button>
+                <Badge variant="secondary">
+                  Current period ITC: {MONEY.format(purchaseItcTotals.igst + purchaseItcTotals.cgst + purchaseItcTotals.sgst + purchaseItcTotals.cess)}
+                </Badge>
+              </div>
+              <div className="overflow-hidden rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Supplier</TableHead>
+                      <TableHead>Invoice</TableHead>
+                      <TableHead>Code</TableHead>
+                      <TableHead className="text-right">Taxable</TableHead>
+                      <TableHead className="text-right">ITC</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {periodPurchaseItcEntries.map((entry) => {
+                      const totalItc = round2(entry.igst + entry.cgst + entry.sgst + entry.cess);
+                      return (
+                        <TableRow key={entry.id}>
+                          <TableCell>
+                            <div>
+                              <p className="font-medium">{entry.supplierName}</p>
+                              <p className="text-xs text-muted-foreground">{entry.gstin || "No GSTIN"} • {entry.placeOfSupply}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <p className="font-medium">{entry.invoiceNumber}</p>
+                            <p className="text-xs text-muted-foreground">{new Date(entry.invoiceDate).toLocaleDateString("en-IN")}</p>
+                          </TableCell>
+                          <TableCell>
+                            <p>{entry.taxCodeType ?? "-"}</p>
+                            <p className="text-xs text-muted-foreground">{entry.hsn || "-"}</p>
+                          </TableCell>
+                          <TableCell className="text-right">{MONEY.format(entry.taxableValue)}</TableCell>
+                          <TableCell className="text-right">{MONEY.format(totalItc)}</TableCell>
+                          <TableCell className="text-right">
+                            <Button type="button" variant="ghost" onClick={() => removePurchaseItcEntry(entry.id)}>
+                              Remove
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
 
