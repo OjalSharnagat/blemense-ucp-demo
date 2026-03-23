@@ -134,6 +134,67 @@ export default function AdminSidebar({
           </div>
 
           <div>
+            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <span className="inline-flex items-center gap-2">
+                <Users className="h-3.5 w-3.5" />
+                Growth
+              </span>
+            </p>
+            <div className="mt-2 space-y-1">
+              <NavLink
+                to="/admin/crm"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <Users className="h-4 w-4" />
+                CRM
+              </NavLink>
+              <NavLink
+                to="/admin/crm/contacts"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <Users className="h-4 w-4" />
+                Contacts
+              </NavLink>
+              <NavLink
+                to="/admin/crm/pipeline"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <Users className="h-4 w-4" />
+                Pipeline
+              </NavLink>
+              <NavLink
+                to="/admin/crm/activities"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <Users className="h-4 w-4" />
+                Activities
+              </NavLink>
+              <NavLink
+                to="/admin/crm/segments"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <Users className="h-4 w-4" />
+                Segments
+              </NavLink>
+            </div>
+          </div>
+
+          <div>
             <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Finance</p>
             <div className="mt-2 space-y-1">
               <NavLink

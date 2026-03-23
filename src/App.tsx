@@ -5,6 +5,7 @@ import AdminTopbar from './components/admin/AdminTopbar'
 import { AdminStoreProvider } from './lib/store'
 import { BillingStoreProvider } from './lib/billingStore'
 import { PosStoreProvider } from './lib/posStore'
+import { CRMStoreProvider } from './lib/crmStore'
 
 const DashboardView = lazy(() => import('./components/admin/views/DashboardView'))
 const ProductsView = lazy(() => import('./components/admin/views/ProductsView'))
@@ -22,6 +23,16 @@ const GSTReturnsView = lazy(() => import('./components/admin/views/billing/GSTRe
 const PaymentsView = lazy(() => import('./components/admin/views/billing/PaymentsView'))
 const BusinessProfileSettings = lazy(() => import('./components/admin/views/billing/BusinessProfileSettings'))
 const SettingsView = lazy(() => import('./components/admin/views/SettingsView'))
+const CRMDashboard = lazy(() => import('./components/admin/views/crm/CRMDashboard'))
+const ContactsView = lazy(() => import('./components/admin/views/crm/ContactsView'))
+const ContactProfile = lazy(() => import('./components/admin/views/crm/ContactProfile'))
+const ContactForm = lazy(() => import('./components/admin/views/crm/ContactForm'))
+const PipelineView = lazy(() => import('./components/admin/views/crm/PipelineView'))
+const ActivitiesView = lazy(() => import('./components/admin/views/crm/ActivitiesView'))
+const SegmentsView = lazy(() => import('./components/admin/views/crm/SegmentsView'))
+const CampaignsView = lazy(() => import('./components/admin/views/crm/CampaignsView'))
+const CRMReports = lazy(() => import('./components/admin/views/crm/CRMReports'))
+const CRMSettings = lazy(() => import('./components/admin/views/crm/CRMSettings'))
 
 function RouteLoading() {
   return (
@@ -36,11 +47,11 @@ function AdminLayout() {
 
   return (
     <section className="min-h-screen bg-muted/40">
-      <AdminSidebar mobileOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
-      <div className="flex min-h-screen flex-col lg:ml-64">
-        <AdminTopbar onOpenSidebar={() => setMobileSidebarOpen(true)} />
-        <main className="flex-1 overflow-auto p-4">
-          <Outlet />
+        <AdminSidebar mobileOpen={mobileSidebarOpen} onClose={() => setMobileSidebarOpen(false)} />
+        <div className="flex min-h-screen flex-col lg:ml-64">
+          <AdminTopbar onOpenSidebar={() => setMobileSidebarOpen(true)} />
+          <main className="flex-1 overflow-auto p-4">
+            <Outlet />
         </main>
       </div>
     </section>
@@ -52,32 +63,46 @@ export default function App() {
     <AdminStoreProvider>
       <BillingStoreProvider>
         <PosStoreProvider>
-          <Routes>
-            <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
-            <Route path="/pos/session" element={<Suspense fallback={<RouteLoading />}><POSSession /></Suspense>} />
-            <Route path="/pos" element={<Suspense fallback={<RouteLoading />}><POSTerminal /></Suspense>} />
+          <CRMStoreProvider>
+            <Routes>
+              <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="/pos/session" element={<Suspense fallback={<RouteLoading />}><POSSession /></Suspense>} />
+              <Route path="/pos" element={<Suspense fallback={<RouteLoading />}><POSTerminal /></Suspense>} />
 
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<Suspense fallback={<RouteLoading />}><DashboardView /></Suspense>} />
-              <Route path="products" element={<Suspense fallback={<RouteLoading />}><ProductsView /></Suspense>} />
-              <Route path="orders" element={<Suspense fallback={<RouteLoading />}><OrdersView /></Suspense>} />
-              <Route path="pos/orders" element={<Suspense fallback={<RouteLoading />}><POSOrders /></Suspense>} />
-              <Route path="pos/reports" element={<Suspense fallback={<RouteLoading />}><POSReports /></Suspense>} />
-              <Route path="settings/pos" element={<Suspense fallback={<RouteLoading />}><POSSettings /></Suspense>} />
-              <Route path="customers" element={<Suspense fallback={<RouteLoading />}><CustomersView /></Suspense>} />
-              <Route path="billing" element={<Suspense fallback={<RouteLoading />}><BillingView /></Suspense>} />
-              <Route path="billing/new" element={<Suspense fallback={<RouteLoading />}><InvoiceBuilder /></Suspense>} />
-              <Route path="billing/:id" element={<Suspense fallback={<RouteLoading />}><InvoiceBuilder /></Suspense>} />
-              <Route path="billing/:id/preview" element={<Suspense fallback={<RouteLoading />}><InvoicePreview /></Suspense>} />
-              <Route path="gst-returns" element={<Suspense fallback={<RouteLoading />}><GSTReturnsView /></Suspense>} />
-              <Route path="payments" element={<Suspense fallback={<RouteLoading />}><PaymentsView /></Suspense>} />
-              <Route path="settings" element={<Suspense fallback={<RouteLoading />}><SettingsView /></Suspense>} />
-              <Route path="settings/business-gst" element={<Suspense fallback={<RouteLoading />}><BusinessProfileSettings /></Suspense>} />
-            </Route>
+              <Route path="/admin" element={<AdminLayout />}>
+                <Route index element={<Navigate to="dashboard" replace />} />
+                <Route path="dashboard" element={<Suspense fallback={<RouteLoading />}><DashboardView /></Suspense>} />
+                <Route path="products" element={<Suspense fallback={<RouteLoading />}><ProductsView /></Suspense>} />
+                <Route path="orders" element={<Suspense fallback={<RouteLoading />}><OrdersView /></Suspense>} />
+                <Route path="pos/orders" element={<Suspense fallback={<RouteLoading />}><POSOrders /></Suspense>} />
+                <Route path="pos/reports" element={<Suspense fallback={<RouteLoading />}><POSReports /></Suspense>} />
+                <Route path="settings/pos" element={<Suspense fallback={<RouteLoading />}><POSSettings /></Suspense>} />
+                <Route path="customers" element={<Suspense fallback={<RouteLoading />}><CustomersView /></Suspense>} />
+                <Route path="billing" element={<Suspense fallback={<RouteLoading />}><BillingView /></Suspense>} />
+                <Route path="billing/new" element={<Suspense fallback={<RouteLoading />}><InvoiceBuilder /></Suspense>} />
+                <Route path="billing/:id" element={<Suspense fallback={<RouteLoading />}><InvoiceBuilder /></Suspense>} />
+                <Route path="billing/:id/preview" element={<Suspense fallback={<RouteLoading />}><InvoicePreview /></Suspense>} />
+                <Route path="gst-returns" element={<Suspense fallback={<RouteLoading />}><GSTReturnsView /></Suspense>} />
+                <Route path="payments" element={<Suspense fallback={<RouteLoading />}><PaymentsView /></Suspense>} />
+                <Route path="settings" element={<Suspense fallback={<RouteLoading />}><SettingsView /></Suspense>} />
+                <Route path="settings/business-gst" element={<Suspense fallback={<RouteLoading />}><BusinessProfileSettings /></Suspense>} />
 
-            <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
-          </Routes>
+                <Route path="crm" element={<Suspense fallback={<RouteLoading />}><CRMDashboard /></Suspense>} />
+                <Route path="crm/contacts" element={<Suspense fallback={<RouteLoading />}><ContactsView /></Suspense>} />
+                <Route path="crm/contacts/new" element={<Suspense fallback={<RouteLoading />}><ContactForm /></Suspense>} />
+                <Route path="crm/contacts/:id" element={<Suspense fallback={<RouteLoading />}><ContactProfile /></Suspense>} />
+                <Route path="crm/pipeline" element={<Suspense fallback={<RouteLoading />}><PipelineView /></Suspense>} />
+                <Route path="crm/activities" element={<Suspense fallback={<RouteLoading />}><ActivitiesView /></Suspense>} />
+                <Route path="crm/segments" element={<Suspense fallback={<RouteLoading />}><SegmentsView /></Suspense>} />
+                <Route path="crm/campaigns" element={<Suspense fallback={<RouteLoading />}><CampaignsView /></Suspense>} />
+                <Route path="crm/campaigns/:id" element={<Suspense fallback={<RouteLoading />}><CampaignsView /></Suspense>} />
+                <Route path="crm/reports" element={<Suspense fallback={<RouteLoading />}><CRMReports /></Suspense>} />
+                <Route path="crm/settings" element={<Suspense fallback={<RouteLoading />}><CRMSettings /></Suspense>} />
+              </Route>
+
+              <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+            </Routes>
+          </CRMStoreProvider>
         </PosStoreProvider>
       </BillingStoreProvider>
     </AdminStoreProvider>

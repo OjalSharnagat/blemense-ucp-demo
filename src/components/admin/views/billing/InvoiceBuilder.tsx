@@ -12,7 +12,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import type { BusinessProfile, Invoice, InvoiceType, LineItem, Party } from "@/data/billing";
 import { INDIAN_STATES, TAX_CODE_MASTER } from "@/data/gst";
 import { getBusinessModeConfig } from "@/lib/businessMode";
@@ -88,6 +88,20 @@ type InvoiceBuilderState = {
   notes: string;
   terms: string;
   seller: BusinessProfile;
+};
+
+type CRMInvoicePrefill = {
+  contactName?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  contactCompany?: string;
+  contactAddress?: string;
+  contactCity?: string;
+  contactState?: string;
+  contactStateCode?: string;
+  contactPincode?: string;
+  contactGstin?: string;
+  contactPan?: string;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -266,6 +280,7 @@ const parseChargesFromInvoice = (lineItems: LineItem[]) => {
 export default function InvoiceBuilder() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { invoices, parties, businessProfile, createInvoice, updateInvoice, finalizeInvoice, saveParty } = useBillingStore();
 
   const [selectedPartyId, setSelectedPartyId] = useState<string>("");
@@ -281,6 +296,7 @@ export default function InvoiceBuilder() {
   const [ackWarnings, setAckWarnings] = useState(false);
   const [form, setForm] = useState<InvoiceBuilderState>(() => buildDefaultState(businessProfile, parties[0]));
   const businessMode = useMemo(() => getBusinessModeConfig(form.seller), [form.seller]);
+  const crmPrefill = (location.state as CRMInvoicePrefill | null) ?? null;
 
   const existing = id ? invoices.find((item) => item.id === id) : undefined;
   const isNew = !id;
@@ -289,9 +305,41 @@ export default function InvoiceBuilder() {
 
   useEffect(() => {
     if (isNew) {
-      const initial = buildDefaultState(businessProfile, parties[0]);
+      const matchedParty =
+        crmPrefill
+          ? parties.find((party) => {
+              const name = (crmPrefill.contactName || "").trim().toLowerCase();
+              const email = (crmPrefill.contactEmail || "").trim().toLowerCase();
+              const phone = (crmPrefill.contactPhone || "").replace(/\D/g, "");
+              const company = (crmPrefill.contactCompany || "").trim().toLowerCase();
+              return (
+                (name && party.name.toLowerCase() === name) ||
+                (company && party.name.toLowerCase() === company) ||
+                (email && party.email.toLowerCase() === email) ||
+                (phone && party.phone.replace(/\D/g, "") === phone)
+              );
+            })
+          : undefined;
+      const initial = buildDefaultState(businessProfile, matchedParty ?? parties[0]);
+      if (crmPrefill) {
+        initial.buyer = {
+          ...initial.buyer,
+          name: crmPrefill.contactName?.trim() || initial.buyer.name,
+          phone: crmPrefill.contactPhone?.trim() || initial.buyer.phone,
+          email: crmPrefill.contactEmail?.trim() || initial.buyer.email,
+          address: crmPrefill.contactAddress?.trim() || initial.buyer.address,
+          city: crmPrefill.contactCity?.trim() || initial.buyer.city,
+          state: crmPrefill.contactState?.trim() || initial.buyer.state,
+          stateCode: crmPrefill.contactStateCode?.trim() || initial.buyer.stateCode,
+          pincode: crmPrefill.contactPincode?.trim() || initial.buyer.pincode,
+          gstin: crmPrefill.contactGstin?.trim() || initial.buyer.gstin,
+          pan: crmPrefill.contactPan?.trim() || initial.buyer.pan,
+        };
+        initial.placeOfSupply = crmPrefill.contactState?.trim() || initial.placeOfSupply;
+      }
       setForm(initial);
-      setSelectedPartyId(getBusinessModeConfig(businessProfile).showGstFields ? parties[0]?.id ?? "" : "");
+      setSelectedPartyId(matchedParty?.id ?? "");
+      setShowNewParty(Boolean(crmPrefill && !matchedParty));
       return;
     }
     if (!existing) return;
