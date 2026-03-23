@@ -13,6 +13,7 @@ const INITIAL_PRODUCTS: Product[] = mockProducts.map((product) => ({
   rating: 4.5,
   status: product.status,
   sku: product.sku,
+  barcode: product.barcode ?? product.sku,
   description: product.description,
   createdAt: product.createdAt,
   image: product.image,

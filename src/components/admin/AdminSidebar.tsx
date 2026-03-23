@@ -1,4 +1,4 @@
-import { LayoutDashboard, Package, ShoppingCart, Users, Settings, Store, Receipt, FileText, Landmark, Building2 } from 'lucide-react'
+import { BarChart3, Building2, FileText, Landmark, LayoutDashboard, Package, Receipt, ScrollText, Settings, ShoppingCart, SlidersHorizontal, Store, Users } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useBillingStore } from '@/lib/billingStore'
 import { getBusinessModeConfig } from '@/lib/businessMode'
@@ -91,6 +91,36 @@ export default function AdminSidebar({
                 Orders
               </NavLink>
               <NavLink
+                to="/pos"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <ShoppingCart className="h-4 w-4" />
+                POS Terminal
+              </NavLink>
+              <NavLink
+                to="/admin/pos/orders"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <ScrollText className="h-4 w-4" />
+                POS Orders
+              </NavLink>
+              <NavLink
+                to="/admin/pos/reports"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <BarChart3 className="h-4 w-4" />
+                POS Reports
+              </NavLink>
+              <NavLink
                 to="/admin/customers"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
@@ -153,6 +183,16 @@ export default function AdminSidebar({
               >
                 <Settings className="h-4 w-4" />
                 Settings
+              </NavLink>
+              <NavLink
+                to="/admin/settings/pos"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                POS Configuration
               </NavLink>
               <NavLink
                 to="/admin/settings/business-gst"

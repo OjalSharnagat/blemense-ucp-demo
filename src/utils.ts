@@ -15,6 +15,7 @@ export interface Product {
   status?: 'active' | 'draft' | 'archived'
   featured?: boolean
   sku?: string
+  barcode?: string
   image?: string
   images?: string[]
   description?: string

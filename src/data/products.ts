@@ -7,6 +7,7 @@ export interface Product {
   status: 'active' | 'draft' | 'archived'
   image: string
   sku: string
+  barcode?: string
   description: string
   createdAt: string
   hsn?: string

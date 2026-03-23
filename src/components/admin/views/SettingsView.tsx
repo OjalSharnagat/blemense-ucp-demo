@@ -1,4 +1,4 @@
-import { Building2, ChevronRight } from "lucide-react";
+import { Building2, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "../../ui/card";
 
@@ -26,6 +26,21 @@ export default function SettingsView() {
               <div>
                 <p className="font-medium">Business Setup</p>
                 <p className="text-xs text-muted-foreground">Registration status, scale, profile, bank and invoice defaults.</p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          </Link>
+          <Link
+            to="/admin/settings/pos"
+            className="mt-3 flex items-center justify-between rounded-md border px-4 py-3 transition hover:bg-slate-50"
+          >
+            <div className="flex items-center gap-3">
+              <div className="rounded-md bg-slate-100 p-2 text-slate-700">
+                <SlidersHorizontal className="h-4 w-4" />
+              </div>
+              <div>
+                <p className="font-medium">POS Configuration</p>
+                <p className="text-xs text-muted-foreground">Tax display, receipts, stock, customer capture and shortcuts.</p>
               </div>
             </div>
             <ChevronRight className="h-4 w-4 text-muted-foreground" />
