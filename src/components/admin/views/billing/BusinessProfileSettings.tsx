@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CheckCircle2, Eye, EyeOff, Save, TriangleAlert } from "lucide-react";
 import type {
   BusinessCategory,
@@ -31,6 +31,7 @@ export default function BusinessProfileSettings() {
   const [gstinHint, setGstinHint] = useState("");
   const [showAccountNumber, setShowAccountNumber] = useState(false);
   const [saved, setSaved] = useState(false);
+  const lastPersistedForm = useRef("");
 
   const stateFromCode = useMemo(
     () => INDIAN_STATES.find((state) => state.tinCode === form.stateCode || state.name === form.state),
@@ -47,6 +48,13 @@ export default function BusinessProfileSettings() {
       <span>{label}</span>
     </>
   );
+
+  useEffect(() => {
+    const serialized = JSON.stringify(form);
+    if (lastPersistedForm.current === serialized) return;
+    lastPersistedForm.current = serialized;
+    updateBusinessProfile(form);
+  }, [form, updateBusinessProfile]);
 
   const updateStatus = (status: BusinessProfile["gstRegistrationStatus"]) => {
     setForm((prev) => {
@@ -122,10 +130,16 @@ export default function BusinessProfileSettings() {
             Set your business profile once and the rest of the product will adapt around it.
           </p>
         </div>
-        <Button onClick={save}>
-          <Save className="mr-2 h-4 w-4" />
-          Save Profile
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Saved in this browser
+          </span>
+          <Button onClick={save}>
+            <Save className="mr-2 h-4 w-4" />
+            Save Profile
+          </Button>
+        </div>
       </div>
 
       <Card className="border-blue-200 bg-blue-50/60">

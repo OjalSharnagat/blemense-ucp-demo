@@ -19,15 +19,15 @@
   --color-blue-500: #2563eb;
   --color-blue-600: #1d4ed8;
 
-  --background: 210 40% 98%;
-  --foreground: 222 47% 11%;
+  --background: 220 38% 97%;
+  --foreground: 222 47% 9%;
   --card: 0 0% 100%;
   --card-foreground: 222 47% 11%;
-  --muted: 210 40% 96%;
+  --muted: 217 33% 96%;
   --muted-foreground: 215 16% 47%;
-  --border: 214 32% 91%;
+  --border: 214 28% 88%;
   --ring: 221 83% 53%;
-  --primary: 221 83% 53%;
+  --primary: 221 83% 45%;
   --primary-foreground: 210 40% 98%;
   --accent: 210 40% 96%;
   --accent-foreground: 222 47% 11%;
@@ -36,7 +36,7 @@
   --destructive: 0 84% 60%;
   --destructive-foreground: 210 40% 98%;
   --input: 214 32% 91%;
-  --radius: 0.5rem;
+  --radius: 0.85rem;
 }
 
 @layer base {

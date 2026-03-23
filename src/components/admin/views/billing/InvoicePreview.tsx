@@ -158,6 +158,45 @@ export default function InvoicePreview() {
             </div>
           ) : null}
 
+          {invoice.irn ? (
+            <div className="mb-4 grid grid-cols-1 gap-3 rounded-md border border-emerald-200 bg-emerald-50 p-4 md:grid-cols-[1fr_auto] md:items-center">
+              <div className="space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Mock E-Invoice</p>
+                <p className="text-sm font-medium text-emerald-950">
+                  IRN generated locally for this demo invoice.
+                </p>
+                <div className="grid gap-1 text-[11px] text-emerald-900">
+                  <p>
+                    IRN: <span className="font-mono font-semibold">{invoice.irn}</span>
+                  </p>
+                  <p>
+                    Ack No: <span className="font-mono font-semibold">{invoice.irnAcknowledgementNumber || "Not available"}</span>
+                  </p>
+                  <p>
+                    Ack Date:{" "}
+                    <span className="font-semibold">
+                      {invoice.irnAcknowledgementDate ? new Date(invoice.irnAcknowledgementDate).toLocaleString("en-IN") : "Not available"}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-md border border-emerald-200 bg-white p-3 text-center">
+                {invoice.irnQrCodeDataUrl ? (
+                  <img
+                    src={invoice.irnQrCodeDataUrl}
+                    alt="Mock IRN QR code"
+                    className="mx-auto h-36 w-36 object-contain"
+                  />
+                ) : (
+                  <div className="grid h-36 w-36 place-items-center rounded-md border bg-slate-50 text-xs text-slate-500">
+                    QR unavailable
+                  </div>
+                )}
+                <p className="mt-2 text-[10px] text-slate-500">Mock QR code for demo purposes</p>
+              </div>
+            </div>
+          ) : null}
+
           <div className="mb-4 grid grid-cols-2 gap-4">
             <div className="rounded-md border p-3">
               <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Seller</p>

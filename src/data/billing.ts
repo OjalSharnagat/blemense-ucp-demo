@@ -143,6 +143,10 @@ export interface Invoice {
   transportMode?: "ROAD" | "RAIL" | "AIR" | "SHIP";
   transportDistanceKm?: number;
   linkedInvoiceId?: string;
+  irn?: string;
+  irnAcknowledgementNumber?: string;
+  irnAcknowledgementDate?: string;
+  irnQrCodeDataUrl?: string;
   paymentHistory: Payment[];
   amountPaid: number;
   balanceDue: number;

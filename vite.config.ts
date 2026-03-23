@@ -12,5 +12,30 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src')
     }
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined
+          }
+
+          if (id.includes('react-router-dom')) {
+            return 'vendor-router'
+          }
+
+          if (id.includes('lucide-react')) {
+            return 'vendor-icons'
+          }
+
+          if (id.includes('@radix-ui')) {
+            return 'vendor-radix'
+          }
+
+          return undefined
+        }
+      }
+    }
   }
 })

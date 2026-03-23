@@ -1,0 +1,1 @@
+const a=()=>{window.print()},r=(o,e)=>{const c=new Blob([JSON.stringify(e,null,2)],{type:"application/json;charset=utf-8"}),n=URL.createObjectURL(c),t=document.createElement("a");t.href=n,t.download=o,t.click(),URL.revokeObjectURL(n)},i=async()=>{await navigator.clipboard.writeText(window.location.href)};export{i as c,r as d,a as p};

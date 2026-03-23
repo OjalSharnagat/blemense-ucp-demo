@@ -14,6 +14,7 @@ import {
   generateInvoiceNumber,
   getCurrentFinancialYear,
 } from "./gst";
+import { attachMockEInvoice } from "./mockEInvoice";
 
 type InvoiceSequences = Record<string, Record<string, number>>;
 
@@ -585,6 +586,34 @@ const INVOICE_SEQUENCES: InvoiceSequences = {
   DEBIT_NOTE: { "2025-26": 1 },
 };
 
+const BUSINESS_PROFILE_STORAGE_KEY = "demo-ecom.businessProfile";
+
+const readStoredBusinessProfile = (): BusinessProfile | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(BUSINESS_PROFILE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<BusinessProfile>;
+    return {
+      ...DEFAULT_BUSINESS_PROFILE,
+      ...parsed,
+      gstRegistrationStatus: parsed.gstRegistrationStatus ?? DEFAULT_BUSINESS_PROFILE.gstRegistrationStatus,
+      setupComplete: Boolean(parsed.setupComplete),
+    };
+  } catch {
+    return null;
+  }
+};
+
+const writeStoredBusinessProfile = (profile: BusinessProfile) => {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(BUSINESS_PROFILE_STORAGE_KEY, JSON.stringify(profile));
+  } catch {
+    // Ignore storage failures in demo mode.
+  }
+};
+
 const startOfDay = (date: Date): Date => {
   const copy = new Date(date);
   copy.setHours(0, 0, 0, 0);
@@ -631,7 +660,13 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
       );
 
       return {
-        ...invoice,
+        ...attachMockEInvoice({
+          ...invoice,
+          paymentHistory: payments,
+          amountPaid,
+          balanceDue,
+          status: displayStatus,
+        }),
         status: displayStatus,
         paymentHistory: payments,
         amountPaid,
@@ -640,7 +675,7 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
     }),
   );
   const [parties, setParties] = useState<Party[]>(INITIAL_PARTIES);
-  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(DEFAULT_BUSINESS_PROFILE);
+  const [businessProfile, setBusinessProfile] = useState<BusinessProfile>(() => readStoredBusinessProfile() ?? DEFAULT_BUSINESS_PROFILE);
   const [payments, setPayments] = useState<Payment[]>(initialPayments);
   const [invoiceSequences, setInvoiceSequences] = useState<InvoiceSequences>(INVOICE_SEQUENCES);
 
@@ -733,11 +768,11 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
         setInvoices((prev) =>
           prev.map((invoice) => {
             if (invoice.id !== invoiceId || invoice.status !== "DRAFT") return invoice;
-            return {
+            return attachMockEInvoice({
               ...invoice,
               status: "FINALIZED",
               updatedAt: new Date().toISOString(),
-            };
+            });
           }),
         );
       },
@@ -801,6 +836,7 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
       },
       updateBusinessProfile: (profile) => {
         setBusinessProfile(profile);
+        writeStoredBusinessProfile(profile);
       },
     }),
     [invoices, parties, businessProfile, payments, invoiceSequences],

@@ -1,20 +1,29 @@
-import { useState } from 'react'
+import { Suspense, lazy, useState } from 'react'
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import AdminSidebar from './components/admin/AdminSidebar'
 import AdminTopbar from './components/admin/AdminTopbar'
-import DashboardView from './components/admin/views/DashboardView'
-import ProductsView from './components/admin/views/ProductsView'
-import OrdersView from './components/admin/views/OrdersView'
-import CustomersView from './components/admin/views/CustomersView'
-import BillingView from './components/admin/views/billing/BillingView'
-import InvoiceBuilder from './components/admin/views/billing/InvoiceBuilder'
-import InvoicePreview from './components/admin/views/billing/InvoicePreview'
-import GSTReturnsView from './components/admin/views/billing/GSTReturnsView'
-import PaymentsView from './components/admin/views/billing/PaymentsView'
-import BusinessProfileSettings from './components/admin/views/billing/BusinessProfileSettings'
-import SettingsView from './components/admin/views/SettingsView'
 import { AdminStoreProvider } from './lib/store'
 import { BillingStoreProvider } from './lib/billingStore'
+
+const DashboardView = lazy(() => import('./components/admin/views/DashboardView'))
+const ProductsView = lazy(() => import('./components/admin/views/ProductsView'))
+const OrdersView = lazy(() => import('./components/admin/views/OrdersView'))
+const CustomersView = lazy(() => import('./components/admin/views/CustomersView'))
+const BillingView = lazy(() => import('./components/admin/views/billing/BillingView'))
+const InvoiceBuilder = lazy(() => import('./components/admin/views/billing/InvoiceBuilder'))
+const InvoicePreview = lazy(() => import('./components/admin/views/billing/InvoicePreview'))
+const GSTReturnsView = lazy(() => import('./components/admin/views/billing/GSTReturnsView'))
+const PaymentsView = lazy(() => import('./components/admin/views/billing/PaymentsView'))
+const BusinessProfileSettings = lazy(() => import('./components/admin/views/billing/BusinessProfileSettings'))
+const SettingsView = lazy(() => import('./components/admin/views/SettingsView'))
+
+function RouteLoading() {
+  return (
+    <div className="flex min-h-[40vh] items-center justify-center rounded-2xl border border-border bg-background/80 text-sm text-muted-foreground">
+      Loading dashboard section...
+    </div>
+  )
+}
 
 function AdminLayout() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
@@ -41,18 +50,18 @@ export default function App() {
 
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardView />} />
-            <Route path="products" element={<ProductsView />} />
-            <Route path="orders" element={<OrdersView />} />
-            <Route path="customers" element={<CustomersView />} />
-            <Route path="billing" element={<BillingView />} />
-            <Route path="billing/new" element={<InvoiceBuilder />} />
-            <Route path="billing/:id" element={<InvoiceBuilder />} />
-            <Route path="billing/:id/preview" element={<InvoicePreview />} />
-            <Route path="gst-returns" element={<GSTReturnsView />} />
-            <Route path="payments" element={<PaymentsView />} />
-            <Route path="settings" element={<SettingsView />} />
-            <Route path="settings/business-gst" element={<BusinessProfileSettings />} />
+            <Route path="dashboard" element={<Suspense fallback={<RouteLoading />}><DashboardView /></Suspense>} />
+            <Route path="products" element={<Suspense fallback={<RouteLoading />}><ProductsView /></Suspense>} />
+            <Route path="orders" element={<Suspense fallback={<RouteLoading />}><OrdersView /></Suspense>} />
+            <Route path="customers" element={<Suspense fallback={<RouteLoading />}><CustomersView /></Suspense>} />
+            <Route path="billing" element={<Suspense fallback={<RouteLoading />}><BillingView /></Suspense>} />
+            <Route path="billing/new" element={<Suspense fallback={<RouteLoading />}><InvoiceBuilder /></Suspense>} />
+            <Route path="billing/:id" element={<Suspense fallback={<RouteLoading />}><InvoiceBuilder /></Suspense>} />
+            <Route path="billing/:id/preview" element={<Suspense fallback={<RouteLoading />}><InvoicePreview /></Suspense>} />
+            <Route path="gst-returns" element={<Suspense fallback={<RouteLoading />}><GSTReturnsView /></Suspense>} />
+            <Route path="payments" element={<Suspense fallback={<RouteLoading />}><PaymentsView /></Suspense>} />
+            <Route path="settings" element={<Suspense fallback={<RouteLoading />}><SettingsView /></Suspense>} />
+            <Route path="settings/business-gst" element={<Suspense fallback={<RouteLoading />}><BusinessProfileSettings /></Suspense>} />
           </Route>
 
           <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />

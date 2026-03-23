@@ -1650,6 +1650,9 @@ export default function InvoiceBuilder() {
           <DialogHeader>
             <DialogTitle>Invoice Validation Summary</DialogTitle>
             <DialogDescription>Resolve errors and acknowledge warnings before finalizing this invoice.</DialogDescription>
+            <p className="text-xs text-muted-foreground">
+              Eligible GST invoices will receive a mock IRN and QR code locally in this demo.
+            </p>
           </DialogHeader>
           <div className="space-y-3">
             <div className="rounded-md border bg-slate-50 p-3 text-sm">
