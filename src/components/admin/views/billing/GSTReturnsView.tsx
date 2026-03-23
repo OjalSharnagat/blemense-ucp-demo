@@ -78,13 +78,13 @@ export default function GSTReturnsView() {
         <Card>
           <CardContent className="space-y-3 py-6">
             <p className="text-sm text-muted-foreground">
-              GST returns are hidden because this business profile is not GST registered.
+              GST returns are not available because this business profile is not GST registered.
             </p>
             <p className="text-sm text-muted-foreground">
-              Turn on GST registration in Business Setup when you are ready for returns, tax invoices, and filing workflows.
+              Enable GST registration in Business Setup when you are ready for returns, tax invoices, and filing workflows.
             </p>
             <Button asChild>
-              <Link to="/admin/settings/business-gst">Open Business Setup</Link>
+              <Link to="/admin/settings/business-gst">Open Business Settings</Link>
             </Button>
           </CardContent>
         </Card>
@@ -591,7 +591,7 @@ export default function GSTReturnsView() {
       {businessMode.mode === "COMPOSITION" ? (
         <Card className="border-amber-200 bg-amber-50">
           <CardContent className="py-4 text-sm text-amber-900">
-            Composition dealers do not use the standard GSTR-1 / GSTR-3B filing flow. This page stays available as a historical
+            Composition dealers do not use the standard GSTR-1 / GSTR-3B filing flow. This page remains available as a historical
             report only.
           </CardContent>
         </Card>

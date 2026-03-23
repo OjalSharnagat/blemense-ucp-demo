@@ -228,7 +228,7 @@ export default function ProductPanel({
             </div>
           ) : (
             <div className="rounded-md border border-dashed bg-slate-50 px-3 py-2 text-sm text-muted-foreground">
-              HSN/SAC and GST rate stay hidden for this business profile.
+              HSN/SAC and GST rate fields are not shown for this business profile.
             </div>
           )}
 

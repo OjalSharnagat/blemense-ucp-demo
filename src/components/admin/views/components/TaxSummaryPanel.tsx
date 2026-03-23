@@ -80,7 +80,7 @@ export default function TaxSummaryPanel({
           </div>
         ) : (
           <p className="rounded-md border border-dashed bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
-            GST breakdown is hidden for this business profile.
+            GST breakdown is not shown for this business profile.
           </p>
         )}
         <div className="flex justify-between border-t pt-2 text-lg font-semibold">

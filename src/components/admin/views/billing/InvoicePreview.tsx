@@ -166,7 +166,7 @@ export default function InvoicePreview() {
               <p>
                 {invoice.seller.city}, {invoice.seller.state} - {invoice.seller.pincode}
               </p>
-              {businessMode?.showGstFields ? <p>GSTIN: {invoice.seller.gstin || "Not set"}</p> : <p>GST not registered</p>}
+              {businessMode?.showGstFields ? <p>GSTIN: {invoice.seller.gstin || "Not provided"}</p> : <p>GST registration not enabled</p>}
               <p>State: {invoice.seller.state}</p>
               <p>State Code: {invoice.seller.stateCode}</p>
             </div>
@@ -178,7 +178,7 @@ export default function InvoicePreview() {
               <p>
                 {invoice.buyer.city}, {invoice.buyer.state} - {invoice.buyer.pincode}
               </p>
-              {businessMode?.showGstFields ? <p>GSTIN: {invoice.buyer.gstin || "Unregistered"}</p> : <p>Simple bill mode</p>}
+              {businessMode?.showGstFields ? <p>GSTIN: {invoice.buyer.gstin || "Not provided"}</p> : <p>Non-GST bill details</p>}
               <p>State: {invoice.buyer.state}</p>
               <p>State Code: {invoice.buyer.stateCode}</p>
               <p>Place of Supply: {invoice.placeOfSupply}</p>
@@ -262,7 +262,7 @@ export default function InvoicePreview() {
               </>
             ) : (
               <p className="rounded-md border border-dashed bg-slate-50 px-3 py-2 text-[10px] text-slate-600">
-                No GST is collected in this document mode.
+                No GST is collected in this document format.
               </p>
             )}
             <div className="flex justify-between text-base font-bold">
@@ -295,7 +295,7 @@ export default function InvoicePreview() {
                 <div className="h-12 border-b border-dashed" />
               )}
               {!invoice.seller.signatureUrl ? (
-                <p className="mt-2 text-[10px] text-slate-500">This is a computer-generated invoice.</p>
+                <p className="mt-2 text-[10px] text-slate-500">This document is computer generated and does not require a physical signature.</p>
               ) : null}
             </div>
           </div>

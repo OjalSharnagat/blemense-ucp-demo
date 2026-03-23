@@ -846,7 +846,7 @@ export default function InvoiceBuilder() {
                   {businessMode.showGstFields ? (
                     <>
                       <p className="mb-2 rounded-md bg-emerald-50 px-3 py-2 font-semibold text-emerald-700">
-                        GSTIN: {form.seller.gstin || "Not set"}
+                        GSTIN: {form.seller.gstin || "Not provided"}
                       </p>
                       {fieldIssues("seller.gstin").map((issue, idx) => (
                         <p key={`seller-gstin-${idx}`} className="mb-1 text-xs text-rose-600">
@@ -856,7 +856,7 @@ export default function InvoiceBuilder() {
                     </>
                   ) : (
                     <p className="mb-2 rounded-md bg-slate-100 px-3 py-2 font-semibold text-slate-700">
-                      GST registration hidden for this business profile
+                      GST registration details are not shown for this business profile.
                     </p>
                   )}
                   <p>PAN: {form.seller.pan}</p>
@@ -919,7 +919,7 @@ export default function InvoiceBuilder() {
                 </div>
               ) : (
                 <div className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                  Buyer GST details are hidden in this business mode.
+                  Buyer GST details are not displayed in this business mode.
                 </div>
               )}
 
@@ -1275,7 +1275,7 @@ export default function InvoiceBuilder() {
                 </>
               ) : (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  HSN/SAC and GST rate inputs are hidden for this business profile.
+                  HSN/SAC and GST rate fields are not available for this business profile.
                 </p>
               )}
             </CardContent>
@@ -1317,7 +1317,7 @@ export default function InvoiceBuilder() {
                       }
                     />
                   ) : (
-                    <p className="mt-2 text-xs text-muted-foreground">Tax rate hidden for this mode.</p>
+                    <p className="mt-2 text-xs text-muted-foreground">Tax rate entry is not available in this mode.</p>
                   )}
                 </div>
                 <div className="rounded-md border p-3">
@@ -1347,7 +1347,7 @@ export default function InvoiceBuilder() {
                       }
                     />
                   ) : (
-                    <p className="mt-2 text-xs text-muted-foreground">Tax rate hidden for this mode.</p>
+                    <p className="mt-2 text-xs text-muted-foreground">Tax rate entry is not available in this mode.</p>
                   )}
                 </div>
                 <div className="rounded-md border p-3">
@@ -1377,12 +1377,12 @@ export default function InvoiceBuilder() {
                       }
                     />
                   ) : (
-                    <p className="mt-2 text-xs text-muted-foreground">Tax rate hidden for this mode.</p>
+                    <p className="mt-2 text-xs text-muted-foreground">Tax rate entry is not available in this mode.</p>
                   )}
                 </div>
                 {!businessMode.showTaxColumns ? (
                   <p className="md:col-span-2 xl:col-span-3 rounded-md border border-dashed bg-slate-50 p-3 text-xs text-muted-foreground">
-                    Additional charges are treated as simple charges with no GST breakdown in this mode.
+                    Additional charges are recorded without a GST breakdown in this mode.
                   </p>
                 ) : null}
               </CardContent>
@@ -1587,7 +1587,7 @@ export default function InvoiceBuilder() {
                 </div>
               ) : (
                 <p className="rounded-md border bg-slate-50 px-3 py-2 text-xs text-muted-foreground">
-                  This document stays GST-free, so there is no tax breakdown to show.
+                  This document is GST-free, so no tax breakdown is shown.
                 </p>
               )}
               <div className="flex justify-between border-t pt-2 text-lg font-semibold">

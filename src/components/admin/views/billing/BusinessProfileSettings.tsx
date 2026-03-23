@@ -37,6 +37,16 @@ export default function BusinessProfileSettings() {
     [form.stateCode, form.state],
   );
   const businessMode = useMemo(() => getBusinessModeConfig(form), [form]);
+  const gstRegistrationSelectedBase =
+    "w-full transition-all data-[selected=true]:border-primary data-[selected=true]:bg-primary data-[selected=true]:text-primary-foreground data-[selected=true]:shadow-sm";
+  const renderSelectedLabel = (label: string, selected: boolean) => (
+    <>
+      <span className="flex h-4 w-4 items-center justify-center">
+        {selected ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : null}
+      </span>
+      <span>{label}</span>
+    </>
+  );
 
   const updateStatus = (status: BusinessProfile["gstRegistrationStatus"]) => {
     setForm((prev) => {
@@ -143,8 +153,7 @@ export default function BusinessProfileSettings() {
           <CardContent className="flex items-start gap-3 p-4 text-sm text-amber-900">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
             <p>
-              Finish this setup once and we will keep GST screens, invoice defaults, and dashboard notices aligned with your
-              business type.
+              Complete this setup to configure invoice behavior, GST visibility, and threshold alerts for your business profile.
             </p>
           </CardContent>
         </Card>
@@ -162,16 +171,22 @@ export default function BusinessProfileSettings() {
                 <Button
                   type="button"
                   variant={form.gstRegistrationStatus === "REGISTERED" ? "default" : "outline"}
+                  aria-pressed={form.gstRegistrationStatus === "REGISTERED"}
+                  data-selected={form.gstRegistrationStatus === "REGISTERED"}
+                  className={`${gstRegistrationSelectedBase} justify-start gap-2`}
                   onClick={() => updateStatus("REGISTERED")}
                 >
-                  I am GST registered
+                  {renderSelectedLabel("I am GST registered", form.gstRegistrationStatus === "REGISTERED")}
                 </Button>
                 <Button
                   type="button"
                   variant={form.gstRegistrationStatus === "UNREGISTERED" ? "default" : "outline"}
+                  aria-pressed={form.gstRegistrationStatus === "UNREGISTERED"}
+                  data-selected={form.gstRegistrationStatus === "UNREGISTERED"}
+                  className={`${gstRegistrationSelectedBase} justify-start gap-2`}
                   onClick={() => updateStatus("UNREGISTERED")}
                 >
-                  I am not GST registered
+                  {renderSelectedLabel("I am not GST registered", form.gstRegistrationStatus === "UNREGISTERED")}
                 </Button>
               </div>
             </div>
@@ -260,7 +275,7 @@ export default function BusinessProfileSettings() {
             </div>
           ) : (
             <div className="rounded-md border border-dashed bg-slate-50 p-3 text-sm text-muted-foreground">
-              GST-specific fields stay hidden for unregistered businesses, so the rest of the app stays simple.
+              GST registration fields are not displayed while the business is marked as unregistered.
             </div>
           )}
         </CardContent>
