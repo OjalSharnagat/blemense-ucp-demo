@@ -1,12 +1,13 @@
 import { BarChart3, Building2, FileText, Landmark, LayoutDashboard, Package, Receipt, ScrollText, Settings, ShoppingCart, SlidersHorizontal, Store, Users } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
 import { useBillingStore } from '@/lib/billingStore'
-import { getBusinessModeConfig } from '@/lib/businessMode'
+import { getBusinessModeConfig, getCRMCompatibilityConfig } from '@/lib/businessMode'
+import { useCRMStore } from '@/lib/crmStore'
 import { cn } from '../../lib/utils'
 import { Avatar, AvatarFallback } from '../ui/avatar'
 
 const linkBase =
-  'group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors'
+  'group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors'
 
 export default function AdminSidebar({
   mobileOpen,
@@ -16,7 +17,9 @@ export default function AdminSidebar({
   onClose: () => void
 }) {
   const { businessProfile } = useBillingStore()
+  const { settings: crmSettings } = useCRMStore()
   const businessMode = getBusinessModeConfig(businessProfile)
+  const crmCompatibility = getCRMCompatibilityConfig(businessProfile)
   const adminName = 'Naman Arora'
   const adminInitials = 'NA'
   const businessName = businessProfile.tradeName || businessProfile.legalName || 'ABC Enterprises'
@@ -33,26 +36,26 @@ export default function AdminSidebar({
       />
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-64 border-r border-slate-800 bg-slate-900 text-slate-300 transition-transform duration-300 lg:translate-x-0',
+          'fixed inset-y-0 left-0 z-50 w-64 overflow-x-auto overflow-y-auto border-r border-slate-800 bg-slate-900 text-slate-300 transition-transform duration-300 lg:translate-x-0',
           mobileOpen ? 'translate-x-0' : '-translate-x-full'
         )}
       >
-      <div className="flex h-full flex-col">
+      <div className="flex h-full min-w-max flex-col">
         <div className="border-b border-slate-800 px-4 py-4">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-600 text-white">
                 <Store className="h-4 w-4" />
               </div>
-            <div>
-              <p className="text-sm font-semibold text-white">{businessName}</p>
-              <p className="text-xs text-slate-400">Admin Console</p>
+            <div className="min-w-max">
+              <p className="text-sm font-semibold text-white whitespace-nowrap">{businessName}</p>
+              <p className="text-xs text-slate-400 whitespace-nowrap">Admin Console</p>
             </div>
           </div>
         </div>
 
         <nav className="flex-1 space-y-6 px-3 py-4">
           <div>
-            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Overview</p>
+            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Overview</p>
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/dashboard"
@@ -68,7 +71,7 @@ export default function AdminSidebar({
           </div>
 
           <div>
-            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Store</p>
+            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Store</p>
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/products"
@@ -134,7 +137,7 @@ export default function AdminSidebar({
           </div>
 
           <div>
-            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">
               <span className="inline-flex items-center gap-2">
                 <Users className="h-3.5 w-3.5" />
                 Growth
@@ -161,16 +164,18 @@ export default function AdminSidebar({
                 <Users className="h-4 w-4" />
                 Contacts
               </NavLink>
-              <NavLink
-                to="/admin/crm/pipeline"
-                className={({ isActive }) =>
-                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
-                }
-                onClick={onClose}
-              >
-                <Users className="h-4 w-4" />
-                Pipeline
-              </NavLink>
+              {crmSettings.enableSalesPipeline ? (
+                <NavLink
+                  to="/admin/crm/pipeline"
+                  className={({ isActive }) =>
+                    cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                  }
+                  onClick={onClose}
+                >
+                  <Users className="h-4 w-4" />
+                  Pipeline
+                </NavLink>
+              ) : null}
               <NavLink
                 to="/admin/crm/activities"
                 className={({ isActive }) =>
@@ -181,21 +186,35 @@ export default function AdminSidebar({
                 <Users className="h-4 w-4" />
                 Activities
               </NavLink>
-              <NavLink
-                to="/admin/crm/segments"
-                className={({ isActive }) =>
-                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
-                }
-                onClick={onClose}
-              >
-                <Users className="h-4 w-4" />
-                Segments
-              </NavLink>
+              {crmSettings.enableSalesPipeline || crmCompatibility.highlightSegments ? (
+                <NavLink
+                  to="/admin/crm/segments"
+                  className={({ isActive }) =>
+                    cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                  }
+                  onClick={onClose}
+                >
+                  <Users className="h-4 w-4" />
+                  Segments
+                </NavLink>
+              ) : null}
+              {crmSettings.enableSalesPipeline || crmCompatibility.highlightReports ? (
+                <NavLink
+                  to="/admin/crm/reports"
+                  className={({ isActive }) =>
+                    cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                  }
+                  onClick={onClose}
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Reports
+                </NavLink>
+              ) : null}
             </div>
           </div>
 
           <div>
-            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Finance</p>
+            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Finance</p>
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/billing"
@@ -233,7 +252,7 @@ export default function AdminSidebar({
           </div>
 
           <div>
-            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Settings</p>
+            <p className="px-2 text-xs font-semibold uppercase tracking-wide text-slate-500 whitespace-nowrap">Settings</p>
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/settings"
@@ -244,6 +263,16 @@ export default function AdminSidebar({
               >
                 <Settings className="h-4 w-4" />
                 Settings
+              </NavLink>
+              <NavLink
+                to="/admin/crm/settings"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
+                onClick={onClose}
+              >
+                <SlidersHorizontal className="h-4 w-4" />
+                CRM Settings
               </NavLink>
               <NavLink
                 to="/admin/settings/pos"
@@ -275,9 +304,9 @@ export default function AdminSidebar({
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-blue-600 text-xs text-white">{adminInitials}</AvatarFallback>
               </Avatar>
-              <div>
-                <p className="text-sm font-medium text-slate-100">{adminName}</p>
-                <p className="text-xs text-slate-400">Admin</p>
+              <div className="min-w-max">
+                <p className="text-sm font-medium text-slate-100 whitespace-nowrap">{adminName}</p>
+                <p className="text-xs text-slate-400 whitespace-nowrap">Admin</p>
               </div>
             </div>
             <NavLink to="/admin/settings" className="text-slate-400 hover:text-slate-100">

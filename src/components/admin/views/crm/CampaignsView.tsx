@@ -189,7 +189,7 @@ export default function CampaignsView() {
   const navigate = useNavigate()
   const { id: campaignId } = useParams()
   const [searchParams] = useSearchParams()
-  const { campaigns, segments, contacts, createCampaign, updateCampaign, logActivity, evaluateDynamicSegment } = useCRMStore()
+  const { campaigns, segments, contacts, createCampaign, updateCampaign, logActivity, evaluateDynamicSegment, settings } = useCRMStore()
 
   const [createModalOpen, setCreateModalOpen] = useState(false)
   const [activityModalOpen, setActivityModalOpen] = useState(false)
@@ -240,6 +240,33 @@ export default function CampaignsView() {
   const selectedCampaign = campaign
   const selectedSegment = selectedCampaign ? segments.find((item) => item.id === selectedCampaign.segmentId) : null
   const selectedRows = selectedCampaign ? buildRows(selectedCampaign, selectedSegment, contacts, evaluateDynamicSegment) : []
+
+  if (!settings.enableCampaigns) {
+    return (
+      <div className="dash-view space-y-6">
+        <Card className={panelClassName()}>
+          <CardContent className="space-y-4 p-6">
+            <Badge variant="secondary">Campaigns disabled</Badge>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-semibold tracking-tight">Manual outreach tracking is off</h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                This business is currently using the contacts-and-activities CRM mode. Enable Campaigns in CRM Settings when you want to track
+                manual WhatsApp, email, call, or SMS outreach at scale.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild>
+                <Link to="/admin/crm/settings">Open CRM Settings</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/admin/crm/contacts">Open Contacts</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const stats = useMemo(() => {
     if (!selectedCampaign) return null

@@ -37,6 +37,7 @@ import {
   getContactDisplayName,
   getContactInitials,
   getContactReference,
+  getSourceLabel,
   ratingVariant,
   typeVariant,
   ScoreBadge
@@ -46,7 +47,7 @@ import type { Contact } from '@/data/crm'
 type ViewMode = 'table' | 'cards'
 type SortField = 'name' | 'lastContactedAt' | 'createdAt' | 'score'
 type QuickType = 'CUSTOMER' | 'LEAD' | 'VENDOR' | 'PARTNER'
-type QuickSource = 'WALK_IN' | 'REFERRAL' | 'WEBSITE' | 'SOCIAL_MEDIA' | 'COLD_CALL' | 'EXHIBITION' | 'OTHER'
+type QuickSource = string
 type ImportStep = 1 | 2 | 3
 
 type QuickAddState = {
@@ -252,6 +253,7 @@ export default function ContactsView() {
     logActivity,
     computeContactScore
   } = useCRMStore()
+  const showTeamFeatures = settings.enableTeamFeatures
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'table'
@@ -329,8 +331,9 @@ export default function ContactsView() {
   }, [contacts])
 
   const assignees = useMemo(() => {
+    if (!showTeamFeatures) return []
     return [...new Set(contacts.map((contact) => contact.assignedTo).filter((value): value is string => Boolean(value)))].sort((a, b) => a.localeCompare(b))
-  }, [contacts])
+  }, [contacts, showTeamFeatures])
 
   const staticSegments = useMemo(() => segments.filter((segment) => segment.type === 'STATIC'), [segments])
 
@@ -349,7 +352,7 @@ export default function ContactsView() {
       .map((contact) => ({ contact, score: getScore(contact, computeContactScore), lastContacted: getLastContacted(contact), createdAt: getCreatedDate(contact) }))
       .filter(({ contact }) => (typeFilter === 'ALL' ? true : contact.type === typeFilter))
       .filter(({ contact }) => (statusFilter === 'ALL' ? true : contact.status === statusFilter))
-      .filter(({ contact }) => (assignedFilter === 'ALL' ? true : contact.assignedTo === assignedFilter))
+      .filter(({ contact }) => (!showTeamFeatures || assignedFilter === 'ALL' ? true : contact.assignedTo === assignedFilter))
       .filter(({ contact }) => (selectedTags.length ? selectedTags.every((tag) => contact.tags.includes(tag)) : true))
       .filter(({ contact }) => {
         if (!q) return true
@@ -374,7 +377,7 @@ export default function ContactsView() {
       if (sortField === 'createdAt') return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       return b.score - a.score
     })
-  }, [assignedFilter, computeContactScore, contacts, search, selectedTags, sortField, statusFilter, typeFilter])
+  }, [assignedFilter, computeContactScore, contacts, search, selectedTags, showTeamFeatures, sortField, statusFilter, typeFilter])
 
   const selectedContacts = useMemo(
     () => selectedIds.map((id) => contacts.find((contact) => contact.id === id)).filter((value): value is Contact => Boolean(value)),
@@ -436,7 +439,7 @@ export default function ContactsView() {
       pan: undefined,
       source: quickAdd.source,
       tags: [],
-      assignedTo: settings.defaultAssignee,
+      assignedTo: showTeamFeatures ? settings.defaultAssignee : undefined,
       rating: quickAdd.type === 'LEAD' ? 'WARM' : undefined,
       status: 'ACTIVE',
       notes: '',
@@ -452,6 +455,7 @@ export default function ContactsView() {
 
   const applyBulkAssignee = () => {
     if (!selectedIds.length || !bulkAssignee.trim()) return
+    if (!showTeamFeatures) return
     selectedContacts.forEach((contact) => updateContact({ ...contact, assignedTo: bulkAssignee.trim() }))
   }
 
@@ -488,7 +492,7 @@ export default function ContactsView() {
         lastContactedAt: contact.lastContactedAt || '',
         tags: contact.tags.join(' | '),
         rating: contact.rating || '',
-        assignedTo: contact.assignedTo || ''
+      assignedTo: contact.assignedTo || ''
       }))
     )
   }
@@ -621,7 +625,7 @@ export default function ContactsView() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 xl:grid-cols-[1.6fr_repeat(4,minmax(0,0.9fr))]">
+          <div className={cn('grid gap-3', showTeamFeatures ? 'xl:grid-cols-[1.6fr_repeat(4,minmax(0,0.9fr))]' : 'xl:grid-cols-[1.6fr_repeat(3,minmax(0,0.9fr))]')}>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search name, phone, email, company" />
@@ -639,14 +643,16 @@ export default function ContactsView() {
               <option value="INACTIVE">Inactive</option>
               <option value="BLOCKED">Blocked</option>
             </Select>
-            <Select value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
-              <option value="ALL">All Assignees</option>
-              {assignees.map((assignee) => (
-                <option key={assignee} value={assignee}>
-                  {assignee}
-                </option>
-              ))}
-            </Select>
+            {showTeamFeatures ? (
+              <Select value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
+                <option value="ALL">All Assignees</option>
+                {assignees.map((assignee) => (
+                  <option key={assignee} value={assignee}>
+                    {assignee}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
             <Select value={sortField} onChange={(event) => setSortField(event.target.value as SortField)}>
               <option value="score">Sort by Score</option>
               <option value="name">Sort by Name</option>
@@ -655,7 +661,7 @@ export default function ContactsView() {
             </Select>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[1.3fr_1fr_1fr]">
+          <div className={cn('grid gap-3', showTeamFeatures ? 'xl:grid-cols-[1.3fr_1fr_1fr]' : 'xl:grid-cols-[1.3fr_1fr]')}>
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Tag filter</p>
               <select
@@ -689,7 +695,7 @@ export default function ContactsView() {
             </div>
             <div className="rounded-xl border bg-muted/20 p-3">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">View preference</p>
-              <p className="mt-2 text-sm text-muted-foreground">Saved in localStorage for the next visit.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Your preferred view is remembered on this device.</p>
             </div>
           </div>
         </CardContent>
@@ -708,11 +714,13 @@ export default function ContactsView() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent className="grid gap-3 xl:grid-cols-[1fr_1fr_1fr_auto_auto]">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Assign to</p>
-              <Input value={bulkAssignee} onChange={(event) => setBulkAssignee(event.target.value)} placeholder="Assignee name" />
-            </div>
+          <CardContent className={cn('grid gap-3', showTeamFeatures ? 'xl:grid-cols-[1fr_1fr_1fr_auto_auto]' : 'xl:grid-cols-[1fr_1fr_auto_auto]')}>
+            {showTeamFeatures ? (
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Assign to</p>
+                <Input value={bulkAssignee} onChange={(event) => setBulkAssignee(event.target.value)} placeholder="Assignee name" />
+              </div>
+            ) : null}
             <div className="space-y-1">
               <p className="text-xs uppercase tracking-wide text-muted-foreground">Add tag</p>
               <Input value={bulkTag} onChange={(event) => setBulkTag(event.target.value)} placeholder="festival" />
@@ -728,11 +736,13 @@ export default function ContactsView() {
                 ))}
               </Select>
             </div>
-            <div className="flex items-end">
-              <Button type="button" variant="outline" className="w-full" onClick={applyBulkAssignee}>
-                Assign
-              </Button>
-            </div>
+            {showTeamFeatures ? (
+              <div className="flex items-end">
+                <Button type="button" variant="outline" className="w-full" onClick={applyBulkAssignee}>
+                  Assign
+                </Button>
+              </div>
+            ) : null}
             <div className="flex flex-wrap items-end gap-2">
               <Button type="button" variant="outline" onClick={applyBulkTag}>
                 Add Tag
@@ -778,7 +788,7 @@ export default function ContactsView() {
                   <TableHead>Last Contacted</TableHead>
                   <TableHead>Tags</TableHead>
                   <TableHead>Rating</TableHead>
-                  <TableHead>Assigned To</TableHead>
+                  {showTeamFeatures ? <TableHead>Assigned To</TableHead> : null}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -832,7 +842,7 @@ export default function ContactsView() {
                       <TableCell>
                         {contact.type === 'LEAD' ? <Badge variant={ratingVariant(contact.rating)}>{contact.rating || 'N/A'}</Badge> : <ScoreBadge score={score} />}
                       </TableCell>
-                      <TableCell>{contact.assignedTo || 'Unassigned'}</TableCell>
+                      {showTeamFeatures ? <TableCell>{contact.assignedTo || 'Unassigned'}</TableCell> : null}
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button type="button" size="sm" variant="ghost" onClick={() => quickLog(contact, 'CALL')}>
@@ -852,7 +862,7 @@ export default function ContactsView() {
 
                 {!filteredContacts.length ? (
                   <TableRow>
-                    <TableCell colSpan={10}>
+                    <TableCell colSpan={showTeamFeatures ? 10 : 9}>
                       <div className="flex flex-col items-center justify-center gap-2 py-10 text-center text-muted-foreground">
                         <UserSearch className="h-10 w-10 text-muted-foreground/60" />
                         <p className="font-medium text-foreground">No contacts found.</p>
@@ -911,7 +921,7 @@ export default function ContactsView() {
 
                   <div className="flex items-center justify-between gap-2">
                     {contact.type === 'LEAD' ? <Badge variant={ratingVariant(contact.rating)}>{contact.rating || 'N/A'}</Badge> : <ScoreBadge score={score} />}
-                    <p className="text-xs text-muted-foreground">Assigned to {contact.assignedTo || 'nobody'}</p>
+                    {showTeamFeatures ? <p className="text-xs text-muted-foreground">Assigned to {contact.assignedTo || 'nobody'}</p> : <p className="text-xs text-muted-foreground">Solo mode</p>}
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
@@ -990,17 +1000,15 @@ export default function ContactsView() {
                 </Select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">Source</label>
-                <Select value={quickAdd.source} onChange={(event) => setQuickAdd((prev) => ({ ...prev, source: event.target.value as QuickSource }))}>
-                  <option value="WALK_IN">Walk-in</option>
-                  <option value="REFERRAL">Referral</option>
-                  <option value="WEBSITE">Website</option>
-                  <option value="SOCIAL_MEDIA">Social media</option>
-                  <option value="COLD_CALL">Cold call</option>
-                  <option value="EXHIBITION">Exhibition</option>
-                  <option value="OTHER">Other</option>
-                </Select>
-              </div>
+              <label className="mb-1 block text-sm font-medium">Source</label>
+              <Select value={quickAdd.source} onChange={(event) => setQuickAdd((prev) => ({ ...prev, source: event.target.value as QuickSource }))}>
+                {settings.leadSources.map((source) => (
+                  <option key={source} value={source}>
+                    {getSourceLabel(source)}
+                  </option>
+                ))}
+              </Select>
+            </div>
 
               <div className="rounded-xl border bg-muted/20 p-4 text-sm text-muted-foreground">
                 Full contact details can be filled later from the profile screen.
@@ -1110,7 +1118,8 @@ export default function ContactsView() {
                         {row.phone || 'No phone'} · {row.email || 'No email'} · {row.source || 'No source'}
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        Assigned to {row.assignedTo || 'N/A'} · Tags: {row.tags || 'none'}
+                        {showTeamFeatures ? `Assigned to ${row.assignedTo || 'N/A'} · ` : ''}
+                        Tags: {row.tags || 'none'}
                       </p>
                     </div>
                   ))}

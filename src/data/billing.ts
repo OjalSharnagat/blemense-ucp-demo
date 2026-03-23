@@ -99,6 +99,7 @@ export interface Payment {
   id: string;
   invoiceId: string;
   customerId?: string;
+  crmContactId?: string;
   orderId?: string;
   date: string;
   amount: number;
@@ -135,6 +136,7 @@ export interface Invoice {
   seller: BusinessProfile;
   buyer: Party;
   customerId?: string;
+  crmContactId?: string;
   orderId?: string;
   shippingAddress?: ShippingAddress;
   lineItems: LineItem[];

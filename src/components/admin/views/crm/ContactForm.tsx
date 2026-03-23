@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Save } from 'lucide-react'
 import { useCRMStore } from '@/lib/crmStore'
@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { panelClassName, getContactInitials } from './shared'
+import { getContactInitials, getSourceLabel, panelClassName } from './shared'
+import type { CustomContactField } from '@/data/crm'
 
 type FormState = {
   type: 'CUSTOMER' | 'LEAD' | 'VENDOR' | 'PARTNER'
@@ -31,6 +32,7 @@ type FormState = {
   tags: string
   notes: string
   linkedCustomerId: string
+  customFields: Record<string, string>
 }
 
 const initialState: FormState = {
@@ -53,7 +55,27 @@ const initialState: FormState = {
   rating: 'WARM',
   tags: '',
   notes: '',
-  linkedCustomerId: ''
+  linkedCustomerId: '',
+  customFields: {}
+}
+
+function buildCustomFieldDraft(fields: CustomContactField[]): Record<string, string> {
+  return fields.reduce<Record<string, string>>((acc, field) => {
+    acc[field.id] = field.type === 'CHECKBOX' ? 'false' : ''
+    return acc
+  }, {})
+}
+
+function parseCustomFieldValue(field: CustomContactField, value: string): string | number | boolean | null | undefined {
+  const trimmed = value.trim()
+  if (!trimmed && field.type !== 'CHECKBOX') return undefined
+  if (field.type === 'NUMBER') {
+    const parsed = Number(trimmed)
+    return Number.isFinite(parsed) ? parsed : undefined
+  }
+  if (field.type === 'DATE') return trimmed || undefined
+  if (field.type === 'CHECKBOX') return trimmed === 'true'
+  return trimmed || undefined
 }
 
 export default function ContactForm() {
@@ -61,6 +83,15 @@ export default function ContactForm() {
   const { createContact, settings } = useCRMStore()
   const { customers } = useAdminStore()
   const [form, setForm] = useState<FormState>(initialState)
+  const showTeamFeatures = settings.enableTeamFeatures
+
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      assignedTo: prev.assignedTo || settings.defaultAssignee,
+      customFields: buildCustomFieldDraft(settings.customContactFields)
+    }))
+  }, [settings])
 
   const computedDisplayName = useMemo(() => {
     if (form.displayName.trim()) return form.displayName.trim()
@@ -89,12 +120,16 @@ export default function ContactForm() {
       pincode: form.pincode.trim() || undefined,
       source: form.source,
       tags: form.tags.split(',').map((tag) => tag.trim()).filter(Boolean),
-      assignedTo: form.assignedTo.trim() || settings.defaultAssignee,
+      assignedTo: showTeamFeatures ? form.assignedTo.trim() || settings.defaultAssignee : undefined,
       rating: form.rating,
       status: form.status,
       notes: form.notes.trim() || undefined,
       linkedCustomerId: form.linkedCustomerId || null,
-      customFields: {}
+      customFields: settings.customContactFields.reduce<Record<string, string | number | boolean | null | undefined>>((acc, field) => {
+        const parsed = parseCustomFieldValue(field, form.customFields[field.id] ?? '')
+        if (parsed !== undefined) acc[field.id] = parsed
+        return acc
+      }, {})
     })
 
     navigate(`/admin/crm/contacts/${contact.id}`)
@@ -115,7 +150,7 @@ export default function ContactForm() {
             <p className="text-sm text-muted-foreground">Capture the minimum useful CRM record. We can always enrich it later.</p>
           </div>
         </div>
-        <Badge variant="secondary">Defaults: {settings.defaultAssignee}</Badge>
+        {showTeamFeatures ? <Badge variant="secondary">Defaults: {settings.defaultAssignee}</Badge> : <Badge variant="secondary">Solo mode</Badge>}
       </div>
 
       <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
@@ -189,19 +224,26 @@ export default function ContactForm() {
             <div>
               <label className="mb-1 block text-sm font-medium">Source</label>
               <Select value={form.source} onChange={(event) => setForm((prev) => ({ ...prev, source: event.target.value as FormState['source'] }))}>
-                <option value="WALK_IN">Walk-in</option>
-                <option value="REFERRAL">Referral</option>
-                <option value="WEBSITE">Website</option>
-                <option value="SOCIAL_MEDIA">Social media</option>
-                <option value="COLD_CALL">Cold call</option>
-                <option value="EXHIBITION">Exhibition</option>
-                <option value="OTHER">Other</option>
+                {settings.leadSources.map((source) => (
+                  <option key={source} value={source}>
+                    {getSourceLabel(source)}
+                  </option>
+                ))}
               </Select>
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Assigned to</label>
-              <Input value={form.assignedTo} onChange={(event) => setForm((prev) => ({ ...prev, assignedTo: event.target.value }))} placeholder={settings.defaultAssignee} />
-            </div>
+            {showTeamFeatures ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium">Assigned to</label>
+                <Select value={form.assignedTo} onChange={(event) => setForm((prev) => ({ ...prev, assignedTo: event.target.value }))}>
+                  <option value="">Use default assignee</option>
+                  {settings.teamMembers.map((member) => (
+                    <option key={member} value={member}>
+                      {member}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
             <div>
               <label className="mb-1 block text-sm font-medium">Rating</label>
               <Select value={form.rating} onChange={(event) => setForm((prev) => ({ ...prev, rating: event.target.value as FormState['rating'] }))}>
@@ -223,6 +265,64 @@ export default function ContactForm() {
                 className="flex min-h-28 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 placeholder="Useful context for follow-ups"
               />
+            </div>
+            <div className="md:col-span-2 space-y-3 rounded-2xl border bg-muted/20 p-4">
+              <div>
+                <p className="text-sm font-medium">Custom fields</p>
+                <p className="text-xs text-muted-foreground">These come from CRM Settings and will appear on the contact profile too.</p>
+              </div>
+              {settings.customContactFields.length ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  {settings.customContactFields.map((field) => (
+                    <div key={field.id} className="space-y-2">
+                      <label className="block text-sm font-medium">
+                        {field.label}
+                        {field.required ? <span className="ml-1 text-rose-600">*</span> : null}
+                      </label>
+                      {field.type === 'NUMBER' ? (
+                        <Input
+                          type="number"
+                          value={form.customFields[field.id] ?? ''}
+                          onChange={(event) => setForm((prev) => ({ ...prev, customFields: { ...prev.customFields, [field.id]: event.target.value } }))}
+                        />
+                      ) : field.type === 'DATE' ? (
+                        <Input
+                          type="date"
+                          value={form.customFields[field.id] ?? ''}
+                          onChange={(event) => setForm((prev) => ({ ...prev, customFields: { ...prev.customFields, [field.id]: event.target.value } }))}
+                        />
+                      ) : field.type === 'DROPDOWN' ? (
+                        <Select
+                          value={form.customFields[field.id] ?? ''}
+                          onChange={(event) => setForm((prev) => ({ ...prev, customFields: { ...prev.customFields, [field.id]: event.target.value } }))}
+                        >
+                          <option value="">Select {field.label.toLowerCase()}</option>
+                          {(field.options || []).map((option) => (
+                            <option key={option} value={option}>
+                              {option}
+                            </option>
+                          ))}
+                        </Select>
+                      ) : field.type === 'CHECKBOX' ? (
+                        <Select
+                          value={form.customFields[field.id] ?? 'false'}
+                          onChange={(event) => setForm((prev) => ({ ...prev, customFields: { ...prev.customFields, [field.id]: event.target.value } }))}
+                        >
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </Select>
+                      ) : (
+                        <Input
+                          value={form.customFields[field.id] ?? ''}
+                          onChange={(event) => setForm((prev) => ({ ...prev, customFields: { ...prev.customFields, [field.id]: event.target.value } }))}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">No custom fields configured yet.</div>
+              )}
             </div>
           </CardContent>
         </Card>

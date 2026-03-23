@@ -13,6 +13,17 @@ export interface BusinessModeConfig {
   subtitle: string;
 }
 
+export type CRMDealTerminology = "DEAL" | "PROJECT" | "ENGAGEMENT";
+
+export interface CRMCompatibilityConfig {
+  enableSalesPipeline: boolean;
+  enableCampaigns: boolean;
+  enableTeamFeatures: boolean;
+  dealTerminology: CRMDealTerminology;
+  highlightReports: boolean;
+  highlightSegments: boolean;
+}
+
 export const isGstRegistered = (profile: Pick<BusinessProfile, "gstRegistrationStatus">): boolean =>
   profile.gstRegistrationStatus === "REGISTERED";
 
@@ -61,6 +72,21 @@ export const getBusinessModeConfig = (profile: BusinessProfile): BusinessModeCon
   };
 };
 
+export const getCRMCompatibilityConfig = (profile: BusinessProfile): CRMCompatibilityConfig => {
+  const isVerySmall = profile.businessScale === "FREELANCER" || profile.businessScale === "SMALL";
+  const isServiceBusiness = profile.businessCategory === "SERVICES";
+  const isProductBusiness = profile.businessCategory === "GOODS" || profile.businessCategory === "BOTH";
+
+  return {
+    enableSalesPipeline: !isVerySmall && isGstRegistered(profile),
+    enableCampaigns: !isVerySmall && isGstRegistered(profile),
+    enableTeamFeatures: !isVerySmall,
+    dealTerminology: isServiceBusiness ? "PROJECT" : "DEAL",
+    highlightReports: isProductBusiness,
+    highlightSegments: isProductBusiness
+  };
+};
+
 export const getBusinessScaleLabel = (scale?: BusinessScale): string => {
   switch (scale) {
     case "FREELANCER":
@@ -75,4 +101,3 @@ export const getBusinessScaleLabel = (scale?: BusinessScale): string => {
       return "Unspecified";
   }
 };
-

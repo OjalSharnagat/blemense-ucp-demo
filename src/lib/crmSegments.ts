@@ -1,4 +1,4 @@
-import type { Contact, SegmentCondition, SegmentOperator } from '@/data/crm'
+import type { Contact, CustomContactField, SegmentCondition, SegmentOperator } from '@/data/crm'
 
 export type SegmentLogic = 'AND' | 'OR'
 export type SegmentFieldType = 'text' | 'number' | 'date' | 'boolean' | 'select' | 'tags'
@@ -108,26 +108,26 @@ const toDate = (value: unknown): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date
 }
 
-export function getSegmentFieldOptions(customFields: string[]): SegmentFieldOption[] {
+const customFieldTypeToSegmentType = (type: CustomContactField['type']): SegmentFieldType =>
+  type === 'NUMBER' ? 'number' : type === 'DATE' ? 'date' : type === 'DROPDOWN' ? 'select' : type === 'CHECKBOX' ? 'boolean' : 'text'
+
+export function getSegmentFieldOptions(customFields: CustomContactField[]): SegmentFieldOption[] {
   const customOptions = customFields.map((field) => ({
-    value: `customFields.${field}` as const,
-    label: field
-      .split(/[-_]/)
-      .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-      .join(' '),
+    value: `customFields.${field.id}` as const,
+    label: field.label,
     group: CUSTOM_GROUP,
-    type: 'text' as const
+    type: customFieldTypeToSegmentType(field.type)
   }))
 
   return [...FIELD_CATALOG, ...customOptions]
 }
 
-export function getSegmentFieldMeta(field: SegmentCondition['field'], customFields: string[]): SegmentFieldOption {
+export function getSegmentFieldMeta(field: SegmentCondition['field'], customFields: CustomContactField[]): SegmentFieldOption {
   const options = getSegmentFieldOptions(customFields)
   return options.find((option) => option.value === field) ?? { value: field, label: String(field), group: CUSTOM_GROUP, type: 'text' }
 }
 
-export function getSegmentFieldType(field: SegmentCondition['field'], customFields: string[]): SegmentFieldType {
+export function getSegmentFieldType(field: SegmentCondition['field'], customFields: CustomContactField[]): SegmentFieldType {
   return getSegmentFieldMeta(field, customFields).type
 }
 

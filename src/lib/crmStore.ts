@@ -1,4 +1,4 @@
-import { createContext, createElement, type PropsWithChildren, useContext, useMemo, useState } from 'react'
+import { createContext, createElement, type PropsWithChildren, useContext, useEffect, useMemo, useState } from 'react'
 import {
   crmActivities,
   crmCampaigns,
@@ -24,6 +24,8 @@ import {
   evaluateSegmentConditions,
   type SegmentMetrics
 } from '@/lib/crmSegments'
+import { findBestContactMatch, splitName } from '@/lib/crmSync'
+import { getCRMCompatibilityConfig, type CRMCompatibilityConfig } from '@/lib/businessMode'
 
 export type ContactTimelineEntry =
   | {
@@ -183,6 +185,7 @@ type CRMStoreValue = {
 }
 
 const CRMStoreContext = createContext<CRMStoreValue | null>(null)
+const CRM_SETTINGS_STORAGE_KEY = 'blemense-crm-settings'
 
 const generateId = (prefix: string): string => `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
 
@@ -285,29 +288,94 @@ const mergeContactRecords = (primary: Contact, duplicate: Contact): Contact => {
 
 const toTimelineTimestamp = (value?: string): string => value || new Date(0).toISOString()
 
+const buildDefaultCRMSettings = (compatibility: CRMCompatibilityConfig): CRMSettings => ({
+  ...crmSettings,
+  enableSalesPipeline: compatibility.enableSalesPipeline,
+  enableCampaigns: compatibility.enableCampaigns,
+  enableTeamFeatures: compatibility.enableTeamFeatures,
+  dealTerminology: compatibility.dealTerminology
+})
+
+const mergeCRMSettings = (base: CRMSettings, next?: Partial<CRMSettings> | null): CRMSettings => ({
+  ...base,
+  ...(next || {}),
+  teamMembers: next?.teamMembers?.length ? next.teamMembers : base.teamMembers,
+  dealStages: next?.dealStages?.length ? next.dealStages : base.dealStages,
+  leadSources: next?.leadSources?.length ? next.leadSources : base.leadSources,
+  customContactFields: next?.customContactFields?.length ? next.customContactFields : base.customContactFields,
+  reminderDefaults: {
+    ...base.reminderDefaults,
+    ...(next?.reminderDefaults || {})
+  }
+})
+
 export function CRMStoreProvider({ children }: PropsWithChildren) {
+  const { businessProfile } = useBillingStore()
   const { customers, orders } = useAdminStore()
   const { invoices, payments } = useBillingStore()
   const { orders: posOrders } = usePosStore()
+  const compatibility = getCRMCompatibilityConfig(businessProfile)
+  const defaultCRMSettings = useMemo(() => buildDefaultCRMSettings(compatibility), [compatibility])
   const [contacts, setContacts] = useState<Contact[]>(crmContacts)
   const [deals, setDeals] = useState<Deal[]>(crmDeals)
   const [activities, setActivities] = useState<Activity[]>(crmActivities)
   const [segments, setSegments] = useState<Segment[]>(crmSegments)
   const [campaigns, setCampaigns] = useState<Campaign[]>(crmCampaigns)
   const [contactNotes, setContactNotes] = useState<ContactNote[]>(buildInitialContactNotes)
-  const [settings, setSettings] = useState<CRMSettings>(crmSettings)
+  const [settings, setSettings] = useState<CRMSettings>(() => {
+    if (typeof window === 'undefined') return defaultCRMSettings
+
+    try {
+      const stored = window.localStorage.getItem(CRM_SETTINGS_STORAGE_KEY)
+      if (!stored) return defaultCRMSettings
+      const parsed = JSON.parse(stored) as Partial<CRMSettings>
+      return mergeCRMSettings(defaultCRMSettings, parsed)
+    } catch {
+      return defaultCRMSettings
+    }
+  })
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CRM_SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+    } catch {
+      // Ignore storage failures in demo mode.
+    }
+  }, [settings])
 
   const buildPurchaseMetrics = (contact: Contact): SegmentMetrics => {
     const customerId = contact.linkedCustomerId || undefined
     const customer = customers.find((item) => item.id === customerId)
-    const relatedInvoices = invoices.filter((invoice) => invoice.customerId === customerId)
+    const contactName = contact.displayName.trim().toLowerCase()
+    const contactCompany = contact.company?.trim().toLowerCase() || ''
+    const contactEmail = contact.email?.trim().toLowerCase() || ''
+    const contactPhones = [contact.phone, contact.whatsapp, contact.altPhone]
+      .map((value) => value?.replace(/\D/g, '') || '')
+      .filter((value): value is string => Boolean(value))
+
+    const relatedInvoices = invoices.filter((invoice) => {
+      if (invoice.crmContactId === contact.id) return true
+      if (invoice.customerId === customerId) return true
+      const buyerName = invoice.buyer.name.trim().toLowerCase()
+      const buyerEmail = invoice.buyer.email.trim().toLowerCase()
+      const buyerPhone = invoice.buyer.phone.replace(/\D/g, '')
+      return buyerName === contactName || (contactCompany && buyerName === contactCompany) || (contactEmail && buyerEmail === contactEmail) || (buyerPhone && contactPhones.includes(buyerPhone))
+    })
+    const relatedOrders = orders.filter((order) => {
+      if (order.crmContactId === contact.id) return true
+      if (order.customerId === customerId) return true
+      const orderName = (order.customerName || '').trim().toLowerCase()
+      const orderEmail = (order.customerEmail || order.email || '').trim().toLowerCase()
+      return orderName === contactName || (contactCompany && orderName === contactCompany) || (contactEmail && orderEmail === contactEmail)
+    })
     const relatedPosOrders = posOrders.filter((order) => {
-      const orderName = (order.customerName || '').toLowerCase()
+      if (order.crmContactId === contact.id) return true
+      const orderName = (order.customerName || '').trim().toLowerCase()
       const orderPhone = (order.customerPhone || '').replace(/\D/g, '')
       return (
-        (contact.phone && orderPhone === contact.phone.replace(/\D/g, '')) ||
-        (contact.whatsapp && orderPhone === contact.whatsapp.replace(/\D/g, '')) ||
-        orderName === contact.displayName.toLowerCase()
+        (orderPhone && contactPhones.includes(orderPhone)) ||
+        orderName === contactName ||
+        (contactCompany && orderName === contactCompany)
       )
     })
 
@@ -318,6 +386,7 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
 
     const purchaseDates = [
       ...(customer?.orderIds?.map((orderId) => orders.find((order) => order.id === orderId)?.date || '') ?? []),
+      ...relatedOrders.map((order) => order.date || order.createdAt || ''),
       ...relatedInvoices.map((invoice) => invoice.issueDate),
       ...relatedPosOrders.map((order) => order.completedAt)
     ]
@@ -327,7 +396,7 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
     return {
       totalSpent,
       lastPurchaseDate: purchaseDates.slice(-1)[0],
-      purchaseCount: (customer?.orderIds?.length ?? 0) + relatedInvoices.length + relatedPosOrders.length
+      purchaseCount: (customer?.orderIds?.length ?? 0) + relatedOrders.length + relatedInvoices.length + relatedPosOrders.length
     }
   }
 
@@ -337,7 +406,18 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
 
     const relatedDeals = deals.filter((deal) => deal.contactId === contactId)
     const relatedActivities = activities.filter((activity) => activity.contactId === contactId)
-    const relatedPayments = payments.filter((payment) => payment.customerId === contact.linkedCustomerId)
+    const relatedPayments = payments.filter((payment) => {
+      if (payment.crmContactId === contactId) return true
+      if (payment.customerId && payment.customerId === contact.linkedCustomerId) return true
+      const invoice = invoices.find((item) => item.id === payment.invoiceId)
+      if (!invoice) return false
+      if (invoice.crmContactId === contactId) return true
+      if (contact.linkedCustomerId && invoice.customerId === contact.linkedCustomerId) return true
+      return (
+        invoice.buyer.name.toLowerCase() === contact.displayName.toLowerCase() ||
+        (contact.email ? invoice.buyer.email.toLowerCase() === contact.email.toLowerCase() : false)
+      )
+    })
     const purchaseMetrics = buildPurchaseMetrics(contact)
 
     const daysSincePurchase = purchaseMetrics.lastPurchaseDate
@@ -375,6 +455,274 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
     if (!segment) return []
     return segment.type === 'DYNAMIC' ? evaluateDynamicSegmentIds(segment.id) : segment.contactIds
   }
+
+  const maxDateValue = (a?: string, b?: string): string | undefined => {
+    const values = [a, b].filter(Boolean) as string[]
+    if (!values.length) return a || b
+    return values.sort((left, right) => new Date(left).getTime() - new Date(right).getTime()).slice(-1)[0]
+  }
+
+  const syncContactsFromExternalRecords = (prevContacts: Contact[]): Contact[] => {
+    let nextContacts = [...prevContacts]
+
+    type ContactSyncDraft = Partial<Contact> & {
+      type: Contact['type']
+      entityType: Contact['entityType']
+      firstName: string
+      lastName: string
+      displayName: string
+      avatar: string
+      status: Contact['status']
+      tags: string[]
+      customFields: Contact['customFields']
+      createdAt: string
+      updatedAt: string
+      lastContactedAt?: string
+      assignedTo?: string
+      source?: string
+      linkedCustomerId?: string | null
+    }
+
+    const upsertContact = (identity: { crmContactId?: string | null; linkedCustomerId?: string | null; name?: string | null; company?: string | null; email?: string | null; phone?: string | null }, draft: ContactSyncDraft) => {
+      const matched = findBestContactMatch(nextContacts, identity)
+      if (matched) {
+        nextContacts = nextContacts.map((contact) =>
+          contact.id === matched.id
+            ? {
+                ...contact,
+                type: contact.type || draft.type,
+                entityType: contact.entityType || draft.entityType,
+                firstName: contact.firstName || draft.firstName,
+                lastName: contact.lastName || draft.lastName,
+                displayName: contact.displayName || draft.displayName,
+                company: contact.company || draft.company,
+                designation: contact.designation || draft.designation,
+                email: contact.email || draft.email,
+                phone: contact.phone || draft.phone,
+                altPhone: contact.altPhone || draft.altPhone,
+                whatsapp: contact.whatsapp || draft.whatsapp,
+                address: contact.address || draft.address,
+                city: contact.city || draft.city,
+                state: contact.state || draft.state,
+                pincode: contact.pincode || draft.pincode,
+                gstin: contact.gstin || draft.gstin,
+                pan: contact.pan || draft.pan,
+                source: contact.source || draft.source,
+                tags: dedupeStrings([...contact.tags, ...draft.tags]),
+                assignedTo: contact.assignedTo || draft.assignedTo || settings.defaultAssignee,
+                rating: contact.rating || draft.rating,
+                status: contact.status || draft.status,
+                notes: contact.notes || draft.notes,
+                avatar: contact.avatar || draft.avatar,
+                linkedCustomerId: contact.linkedCustomerId ?? draft.linkedCustomerId ?? null,
+                createdAt: contact.createdAt || draft.createdAt,
+                lastContactedAt: maxDateValue(contact.lastContactedAt, draft.lastContactedAt || draft.updatedAt),
+                updatedAt: draft.updatedAt
+              }
+            : contact
+        )
+        return
+      }
+
+      nextContacts = [
+        {
+          ...draft,
+          id: generateId('crm-con'),
+          assignedTo: draft.assignedTo || settings.defaultAssignee,
+          avatar: draft.avatar || buildContactAvatar(draft),
+          source: draft.source || 'OTHER',
+          notes: draft.notes || undefined,
+          birthday: draft.birthday || undefined,
+          anniversary: draft.anniversary || undefined,
+          linkedCustomerId: draft.linkedCustomerId ?? null,
+          lastContactedAt: draft.lastContactedAt
+        } as Contact,
+        ...nextContacts
+      ]
+    }
+
+    for (const invoice of invoices) {
+      const buyerName = invoice.buyer.name || invoice.buyer.email || 'Billing customer'
+      const { firstName, lastName, displayName } = splitName(buyerName)
+      upsertContact(
+        {
+          crmContactId: invoice.crmContactId,
+          linkedCustomerId: invoice.customerId ?? null,
+          name: invoice.buyer.name,
+          company: invoice.buyer.name,
+          email: invoice.buyer.email,
+          phone: invoice.buyer.phone
+        },
+        {
+          type: 'CUSTOMER',
+          entityType: invoice.buyer.isRegistered ? 'BUSINESS' : 'INDIVIDUAL',
+          firstName,
+          lastName,
+          displayName,
+          company: invoice.buyer.name,
+          designation: undefined,
+          email: invoice.buyer.email || undefined,
+          phone: invoice.buyer.phone || undefined,
+          altPhone: undefined,
+          whatsapp: invoice.buyer.phone || undefined,
+          address: invoice.buyer.address || undefined,
+          city: invoice.buyer.city || undefined,
+          state: invoice.buyer.state || undefined,
+          pincode: invoice.buyer.pincode || undefined,
+          gstin: invoice.buyer.gstin || undefined,
+          pan: invoice.buyer.pan || undefined,
+          source: 'BILLING',
+          tags: ['billing'],
+          assignedTo: settings.defaultAssignee,
+          rating: undefined,
+          status: 'ACTIVE',
+          notes: undefined,
+          avatar: buildContactAvatar({ firstName, lastName, company: invoice.buyer.name, displayName }),
+          linkedCustomerId: invoice.customerId ?? null,
+          createdAt: invoice.createdAt,
+          updatedAt: invoice.updatedAt || invoice.createdAt,
+          lastContactedAt: invoice.issueDate,
+          customFields: {}
+        }
+      )
+    }
+
+    for (const payment of payments) {
+      const invoice = invoices.find((item) => item.id === payment.invoiceId)
+      const contactIdentity = {
+        crmContactId: payment.crmContactId ?? invoice?.crmContactId ?? undefined,
+        linkedCustomerId: payment.customerId ?? invoice?.customerId ?? null,
+        name: invoice?.buyer.name,
+        company: invoice?.buyer.name,
+        email: invoice?.buyer.email,
+        phone: invoice?.buyer.phone
+      }
+      const matched = findBestContactMatch(nextContacts, contactIdentity)
+      if (matched) {
+        nextContacts = nextContacts.map((contact) =>
+          contact.id === matched.id
+            ? {
+                ...contact,
+                linkedCustomerId: contact.linkedCustomerId ?? payment.customerId ?? invoice?.customerId ?? null,
+                lastContactedAt: maxDateValue(contact.lastContactedAt, payment.date),
+                updatedAt: new Date().toISOString()
+              }
+            : contact
+        )
+      }
+    }
+
+    for (const order of orders) {
+      const sourceCustomer = customers.find((customer) => customer.id === order.customerId)
+      const buyerName = order.customerName || sourceCustomer?.name || order.email || 'Online customer'
+      const { firstName, lastName, displayName } = splitName(buyerName)
+      upsertContact(
+        {
+          crmContactId: order.crmContactId,
+          linkedCustomerId: order.customerId ?? null,
+          name: buyerName,
+          email: order.customerEmail || order.email,
+          company: sourceCustomer?.name || undefined
+        },
+        {
+          type: 'CUSTOMER',
+          entityType: 'INDIVIDUAL',
+          firstName,
+          lastName,
+          displayName,
+          company: sourceCustomer?.name || undefined,
+          designation: undefined,
+          email: order.customerEmail || order.email || undefined,
+          phone: undefined,
+          altPhone: undefined,
+          whatsapp: undefined,
+          address: undefined,
+          city: undefined,
+          state: undefined,
+          pincode: undefined,
+          gstin: undefined,
+          pan: undefined,
+          source: 'WEBSITE',
+          tags: ['order'],
+          assignedTo: settings.defaultAssignee,
+          rating: undefined,
+          status: 'ACTIVE',
+          notes: undefined,
+          avatar: buildContactAvatar({ firstName, lastName, company: sourceCustomer?.name, displayName }),
+          linkedCustomerId: order.customerId ?? null,
+          createdAt: order.createdAt || order.date || new Date().toISOString(),
+          updatedAt: order.createdAt || order.date || new Date().toISOString(),
+          lastContactedAt: order.createdAt || order.date || new Date().toISOString(),
+          customFields: {}
+        }
+      )
+    }
+
+    for (const order of posOrders) {
+      const buyerName = order.customerName || 'POS customer'
+      const { firstName, lastName, displayName } = splitName(buyerName)
+      const identity = {
+        crmContactId: order.crmContactId,
+        name: buyerName,
+        phone: order.customerPhone
+      }
+      const matched = findBestContactMatch(nextContacts, identity)
+      if (matched) {
+        nextContacts = nextContacts.map((contact) =>
+          contact.id === matched.id
+            ? {
+                ...contact,
+                lastContactedAt: maxDateValue(contact.lastContactedAt, order.completedAt),
+                updatedAt: new Date().toISOString()
+              }
+            : contact
+        )
+        continue
+      }
+
+      nextContacts = [
+        {
+          id: generateId('crm-con'),
+          type: 'CUSTOMER',
+          entityType: 'INDIVIDUAL',
+          firstName,
+          lastName,
+          displayName,
+          company: undefined,
+          designation: undefined,
+          email: undefined,
+          phone: order.customerPhone || undefined,
+          altPhone: undefined,
+          whatsapp: order.customerPhone || undefined,
+          address: undefined,
+          city: undefined,
+          state: undefined,
+          pincode: undefined,
+          gstin: undefined,
+          pan: undefined,
+          source: 'POS',
+          tags: ['pos'],
+          assignedTo: settings.defaultAssignee,
+          rating: undefined,
+          status: 'ACTIVE',
+          notes: undefined,
+          avatar: buildContactAvatar({ firstName, lastName, displayName }),
+          linkedCustomerId: null,
+          createdAt: order.completedAt,
+          updatedAt: order.completedAt,
+          lastContactedAt: order.completedAt,
+          customFields: {}
+        },
+        ...nextContacts
+      ]
+    }
+
+    return nextContacts
+  }
+
+  useEffect(() => {
+    setContacts((prev) => syncContactsFromExternalRecords(prev))
+  }, [customers, invoices, orders, payments, posOrders, settings.defaultAssignee])
 
   const value = useMemo<CRMStoreValue>(
     () => ({
@@ -699,6 +1047,7 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
 
         const relatedOrders = orders
           .filter((order) => {
+            if (order.crmContactId === contactId) return true
             if (contactCustomerId && order.customerId === contactCustomerId) return true
             if (adminCustomer && order.customerId === adminCustomer.id) return true
             const orderPhone = (order.customerEmail || order.email || '').toLowerCase()
@@ -719,6 +1068,7 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
 
         const relatedInvoices = invoices
           .filter((invoice) => {
+            if (invoice.crmContactId === contactId) return true
             if (contactCustomerId && invoice.customerId === contactCustomerId) return true
             return invoice.buyer.name.toLowerCase() === normalizedName || (contact.email ? invoice.buyer.email.toLowerCase() === contact.email.toLowerCase() : false)
           })
@@ -736,8 +1086,16 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
 
         const relatedPayments = payments
           .filter((payment) => {
+            if (payment.crmContactId === contactId) return true
             if (contactCustomerId && payment.customerId === contactCustomerId) return true
-            return false
+            const paymentInvoice = invoices.find((invoice) => invoice.id === payment.invoiceId)
+            if (!paymentInvoice) return false
+            if (paymentInvoice.crmContactId === contactId) return true
+            if (contactCustomerId && paymentInvoice.customerId === contactCustomerId) return true
+            return (
+              paymentInvoice.buyer.name.toLowerCase() === normalizedName ||
+              (contact.email ? paymentInvoice.buyer.email.toLowerCase() === contact.email.toLowerCase() : false)
+            )
           })
           .map<ContactTimelineEntry>((payment) => ({
             id: payment.id,
@@ -753,6 +1111,7 @@ export function CRMStoreProvider({ children }: PropsWithChildren) {
 
         const relatedPosOrders = posOrders
           .filter((order) => {
+            if (order.crmContactId === contactId) return true
             const orderName = (order.customerName || '').toLowerCase()
             const orderPhone = (order.customerPhone || '').replace(/\D/g, '')
             return (

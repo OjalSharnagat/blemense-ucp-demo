@@ -21,12 +21,16 @@ import { cn } from "@/lib/utils";
 import { fmt, type Product } from "@/utils";
 import { useAdminStore } from "@/lib/store";
 import { useBillingStore } from "@/lib/billingStore";
+import { useCRMStore } from "@/lib/crmStore";
 import { getBusinessModeConfig } from "@/lib/businessMode";
 import { usePosStore } from "@/lib/posStore";
+import { findBestContactMatch } from "@/lib/crmSync";
+import { INDIAN_STATES } from "@/data/gst";
 import { resolveTaxCode } from "@/lib/gst";
 import type { POSOrder, POSPaymentMode } from "@/data/pos";
 import type { LineItem, Party } from "@/data/billing";
 import POSReceipt from "./POSReceipt";
+import { crmDate, crmMoney, getContactDisplayName } from "../crm/shared";
 
 type NoticeTone = "info" | "warning" | "success" | "error";
 
@@ -180,6 +184,7 @@ export default function POSTerminal() {
   const navigate = useNavigate();
   const { products } = useAdminStore();
   const { businessProfile, createInvoice, invoices } = useBillingStore();
+  const { contacts: crmContacts } = useCRMStore();
   const businessMode = getBusinessModeConfig(businessProfile);
   const serviceBusiness = businessProfile.businessCategory === "SERVICES";
   const {
@@ -195,6 +200,7 @@ export default function POSTerminal() {
     applyCartDiscount,
     checkout,
     linkInvoiceToOrder,
+    orders: posOrders,
     settings,
   } = usePosStore();
 
@@ -219,6 +225,58 @@ export default function POSTerminal() {
   const [recentlyAddedProductId, setRecentlyAddedProductId] = useState<string | null>(null);
   const [keyboardHint, setKeyboardHint] = useState("F2 or / to focus search");
   const [windowWidth, setWindowWidth] = useState(typeof window === "undefined" ? 1440 : window.innerWidth);
+
+  const matchedCrmContact = useMemo(() => {
+    const phone = customerPhone.trim()
+    if (!phone && !customerName.trim()) return null
+    return (
+      findBestContactMatch(crmContacts, {
+        name: customerName,
+        phone
+      }) ?? null
+    )
+  }, [crmContacts, customerName, customerPhone])
+
+  const crmLookupSummary = useMemo(() => {
+    if (!matchedCrmContact) return null
+    const matchedInvoices = invoices.filter((invoice) => {
+      if (invoice.crmContactId === matchedCrmContact.id) return true
+      if (matchedCrmContact.linkedCustomerId && invoice.customerId === matchedCrmContact.linkedCustomerId) return true
+      const name = matchedCrmContact.displayName.trim().toLowerCase()
+      const company = matchedCrmContact.company?.trim().toLowerCase() || ''
+      const buyerName = invoice.buyer.name.trim().toLowerCase()
+      const buyerEmail = invoice.buyer.email.trim().toLowerCase()
+      const contactEmail = matchedCrmContact.email?.trim().toLowerCase() || ''
+      const buyerPhone = invoice.buyer.phone.replace(/\D/g, '')
+      const contactPhones = [matchedCrmContact.phone, matchedCrmContact.whatsapp, matchedCrmContact.altPhone]
+        .map((value) => value?.replace(/\D/g, '') || '')
+        .filter((value): value is string => Boolean(value))
+      return buyerName === name || (company && buyerName === company) || (contactEmail && buyerEmail === contactEmail) || (buyerPhone && contactPhones.includes(buyerPhone))
+    })
+    const matchedPosOrders = posOrders.filter((order) => {
+      if (order.crmContactId === matchedCrmContact.id) return true
+      const name = matchedCrmContact.displayName.trim().toLowerCase()
+      const company = matchedCrmContact.company?.trim().toLowerCase() || ''
+      const orderName = (order.customerName || '').trim().toLowerCase()
+      const orderPhone = (order.customerPhone || '').replace(/\D/g, '')
+      const contactPhones = [matchedCrmContact.phone, matchedCrmContact.whatsapp, matchedCrmContact.altPhone]
+        .map((value) => value?.replace(/\D/g, '') || '')
+        .filter((value): value is string => Boolean(value))
+      return orderName === name || (company && orderName === company) || (orderPhone && contactPhones.includes(orderPhone))
+    })
+    const spend =
+      matchedInvoices.reduce((sum, invoice) => sum + invoice.taxBreakdown.grandTotal, 0) +
+      matchedPosOrders.reduce((sum, order) => sum + order.total, 0)
+    const lastVisitSource = [
+      ...matchedPosOrders.map((order) => ({ kind: 'POS_ORDER' as const, timestamp: order.completedAt })),
+      ...matchedInvoices.map((invoice) => ({ kind: 'INVOICE' as const, timestamp: invoice.issueDate })),
+    ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0]
+    return {
+      name: getContactDisplayName(matchedCrmContact),
+      lastVisit: lastVisitSource ? new Date(lastVisitSource.timestamp) : null,
+      spend
+    }
+  }, [invoices, matchedCrmContact, posOrders])
 
   const searchRef = useRef<HTMLInputElement | null>(null);
   const cardRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -367,6 +425,7 @@ export default function POSTerminal() {
       notes: "",
       customerName,
       customerPhone,
+      crmContactId: matchedCrmContact?.id,
       generateLinkedInvoice: false,
     });
 
@@ -393,7 +452,32 @@ export default function POSTerminal() {
       return;
     }
 
-    const buyer = buildBuyer(businessProfile.state, businessProfile.stateCode, completedOrder.customerName, completedOrder.customerPhone);
+    const crmContact = completedOrder.crmContactId
+      ? crmContacts.find((contact) => contact.id === completedOrder.crmContactId) ?? matchedCrmContact
+      : matchedCrmContact;
+    const crmStateCode = crmContact?.state
+      ? INDIAN_STATES.find((state) => state.name.trim().toLowerCase() === crmContact.state?.trim().toLowerCase())?.tinCode || businessProfile.stateCode
+      : businessProfile.stateCode;
+    const buyer = crmContact
+      ? {
+          ...buildBuyer(
+            businessProfile.state,
+            businessProfile.stateCode,
+            crmContact.displayName || crmContact.company || completedOrder.customerName,
+            crmContact.phone || crmContact.whatsapp || completedOrder.customerPhone,
+          ),
+          name: crmContact.displayName || crmContact.company || completedOrder.customerName || 'Customer',
+          email: crmContact.email || '',
+          phone: crmContact.phone || crmContact.whatsapp || completedOrder.customerPhone || '',
+          address: crmContact.address || businessProfile.address || 'Counter sale',
+          city: crmContact.city || businessProfile.city || '',
+          state: crmContact.state || businessProfile.state,
+          stateCode: crmStateCode,
+          pincode: crmContact.pincode || businessProfile.pincode || '',
+          gstin: crmContact.gstin || '',
+          pan: crmContact.pan || 'URP',
+        }
+      : buildBuyer(businessProfile.state, businessProfile.stateCode, completedOrder.customerName, completedOrder.customerPhone);
     const lineItems: LineItem[] = completedOrder.items.map((item) => ({
       id: item.id,
       description: item.name,
@@ -423,6 +507,7 @@ export default function POSTerminal() {
       orderId: completedOrder.id,
       linkedInvoiceId: completedOrder.linkedInvoiceId,
       customerId: undefined,
+      crmContactId: crmContact?.id ?? completedOrder.crmContactId,
     });
 
     linkInvoiceToOrder(completedOrder.id, invoice.id);
@@ -1360,6 +1445,31 @@ export default function POSTerminal() {
                           className="h-11 rounded-xl border-slate-200 bg-white text-slate-900"
                         />
                       </div>
+                    </div>
+                    <div className="mt-3">
+                      {customerPhone.trim() ? (
+                        crmLookupSummary ? (
+                          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-sm">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-emerald-900">{crmLookupSummary.name}</p>
+                                <p className="text-xs text-emerald-800/80">
+                                  {matchedCrmContact?.company || matchedCrmContact?.type || 'Known customer'}
+                                </p>
+                              </div>
+                              <Badge className="border-emerald-200 bg-white text-emerald-800">CRM match</Badge>
+                            </div>
+                            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                              <Row label="Last visit" value={crmLookupSummary.lastVisit ? crmDate.format(crmLookupSummary.lastVisit) : 'No visit yet'} />
+                              <Row label="Total spend" value={crmMoney.format(crmLookupSummary.spend)} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-emerald-200 bg-white px-4 py-3 text-sm text-slate-600">
+                            No CRM match yet. Enter the phone exactly as saved to find an existing contact.
+                          </div>
+                        )
+                      ) : null}
                     </div>
                   </div>
 

@@ -1,9 +1,9 @@
 export type ContactType = 'CUSTOMER' | 'LEAD' | 'VENDOR' | 'PARTNER'
 export type EntityType = 'INDIVIDUAL' | 'BUSINESS'
-export type ContactSource = 'WALK_IN' | 'REFERRAL' | 'WEBSITE' | 'SOCIAL_MEDIA' | 'COLD_CALL' | 'EXHIBITION' | 'OTHER'
+export type ContactSource = string
 export type ContactRating = 'HOT' | 'WARM' | 'COLD'
 export type ContactStatus = 'ACTIVE' | 'INACTIVE' | 'BLOCKED'
-export type DealStage = 'LEAD' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'CLOSED_WON' | 'CLOSED_LOST'
+export type DealStage = string
 export type ActivityType = 'CALL' | 'EMAIL' | 'MEETING' | 'WHATSAPP' | 'DEMO' | 'SITE_VISIT' | 'FOLLOW_UP' | 'NOTE' | 'TASK'
 export type ActivityStatus = 'SCHEDULED' | 'COMPLETED' | 'CANCELLED' | 'MISSED'
 export type SegmentType = 'STATIC' | 'DYNAMIC'
@@ -23,6 +23,15 @@ export type CampaignType = 'WHATSAPP' | 'EMAIL' | 'CALL' | 'SMS'
 export type CampaignStatus = 'DRAFT' | 'ACTIVE' | 'COMPLETED'
 export type SegmentLogic = 'AND' | 'OR'
 export type CampaignResponseStatus = 'NO_RESPONSE' | 'INTERESTED' | 'NOT_INTERESTED' | 'CONVERTED'
+export type CustomContactFieldType = 'TEXT' | 'NUMBER' | 'DATE' | 'DROPDOWN' | 'CHECKBOX'
+
+export interface CustomContactField {
+  id: string
+  label: string
+  type: CustomContactFieldType
+  required: boolean
+  options?: string[]
+}
 
 export interface Contact {
   id: string
@@ -156,13 +165,19 @@ export interface CampaignContactResult {
 
 export interface CRMSettings {
   defaultAssignee: string
-  dealStages: DealStage[]
-  leadSources: ContactSource[]
-  customContactFields: string[]
+  teamMembers: string[]
+  dealStages: string[]
+  leadSources: string[]
+  customContactFields: CustomContactField[]
+  enableSalesPipeline: boolean
+  enableCampaigns: boolean
+  enableTeamFeatures: boolean
+  dealTerminology: 'DEAL' | 'PROJECT' | 'ENGAGEMENT'
   reminderDefaults: {
     call: number
     meeting: number
     followUp: number
+    followUpAlertDays: number
   }
   enableBirthdayReminders: boolean
   enableFollowUpAlerts: boolean
@@ -1354,12 +1369,25 @@ export const crmCampaigns: Campaign[] = [
 export const crmSettings: CRMSettings = {
   defaultAssignee: 'Naman Arora',
   dealStages: ['LEAD', 'QUALIFIED', 'PROPOSAL', 'NEGOTIATION', 'CLOSED_WON', 'CLOSED_LOST'],
-  leadSources: ['WALK_IN', 'REFERRAL', 'WEBSITE', 'SOCIAL_MEDIA', 'COLD_CALL', 'EXHIBITION', 'OTHER'],
-  customContactFields: ['preferredLanguage', 'preferredChannel', 'monthlyPotential', 'creditLimit', 'annualPotential', 'outstandingBalance'],
+  teamMembers: ['Naman Arora', 'Meera Joshi', 'Rohit Kumar'],
+  leadSources: ['WALK_IN', 'REFERRAL', 'WEBSITE', 'SOCIAL_MEDIA', 'COLD_CALL', 'EXHIBITION', 'JUSTDIAL', 'INDIAMART', 'OTHER'],
+  customContactFields: [
+    { id: 'preferredLanguage', label: 'Preferred language', type: 'TEXT', required: false },
+    { id: 'preferredChannel', label: 'Preferred channel', type: 'DROPDOWN', required: false, options: ['Phone', 'WhatsApp', 'Email', 'Visit'] },
+    { id: 'monthlyPotential', label: 'Monthly potential', type: 'NUMBER', required: false },
+    { id: 'creditLimit', label: 'Credit limit', type: 'NUMBER', required: false },
+    { id: 'annualPotential', label: 'Annual potential', type: 'NUMBER', required: false },
+    { id: 'outstandingBalance', label: 'Outstanding balance', type: 'NUMBER', required: false }
+  ],
+  enableSalesPipeline: true,
+  enableCampaigns: true,
+  enableTeamFeatures: true,
+  dealTerminology: 'DEAL',
   reminderDefaults: {
     call: 30,
     meeting: 60,
-    followUp: 120
+    followUp: 120,
+    followUpAlertDays: 7
   },
   enableBirthdayReminders: true,
   enableFollowUpAlerts: true

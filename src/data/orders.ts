@@ -1,6 +1,7 @@
 export interface Order {
   id: string
   customerId?: string
+  crmContactId?: string
   customer: string
   email: string
   items: string[]

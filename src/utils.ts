@@ -45,6 +45,7 @@ export interface Order {
   status: string
   total: number
   customerId?: string
+  crmContactId?: string
   items: Array<{
     productId: string
     name: string

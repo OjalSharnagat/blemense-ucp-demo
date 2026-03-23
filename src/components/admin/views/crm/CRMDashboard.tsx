@@ -19,11 +19,12 @@ import {
 import { useAdminStore } from '@/lib/store'
 import { useBillingStore } from '@/lib/billingStore'
 import { useCRMStore } from '@/lib/crmStore'
+import { getCRMCompatibilityConfig } from '@/lib/businessMode'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
-import { ActivityDueBanner, panelClassName, crmMoney, getContactAvatarClass, getContactDisplayName, getContactInitials } from './shared'
+import { ActivityDueBanner, panelClassName, crmDate, crmMoney, getContactAvatarClass, getContactDisplayName, getContactInitials } from './shared'
 import type { Activity, Contact } from '@/data/crm'
 
 function startOfDay(date = new Date()): number {
@@ -110,9 +111,10 @@ function formatDateOnly(value?: string): string {
 }
 
 export default function CRMDashboard() {
-  const { contacts, deals, activities, getDueActivities, completeActivity } = useCRMStore()
+  const { contacts, deals, activities, getDueActivities, completeActivity, settings } = useCRMStore()
   const { customers, orders } = useAdminStore()
-  const { invoices } = useBillingStore()
+  const { businessProfile, invoices } = useBillingStore()
+  const crmCompatibility = getCRMCompatibilityConfig(businessProfile)
 
   const dueActivities = getDueActivities()
   const now = Date.now()
@@ -203,6 +205,134 @@ export default function CRMDashboard() {
   }, [activities, contacts, deals, invoices, orders, customers])
 
   const maxStageValue = Math.max(...dashboard.stageSummary.map((stage) => stage.value), 1)
+  const simpleMode = !settings.enableSalesPipeline
+  const recentContacts = useMemo(
+    () =>
+      [...contacts]
+        .sort((a, b) => new Date(b.lastContactedAt || b.updatedAt || b.createdAt).getTime() - new Date(a.lastContactedAt || a.updatedAt || a.createdAt).getTime())
+        .slice(0, 8),
+    [contacts]
+  )
+
+  if (simpleMode) {
+    return (
+      <div className="dash-view space-y-6">
+        <ActivityDueBanner activities={dueActivities} />
+
+        <div className={panelClassName('overflow-hidden')}>
+          <div className="grid gap-6 bg-[linear-gradient(135deg,rgba(15,23,42,0.96)_0%,rgba(30,64,175,0.92)_55%,rgba(37,99,235,0.82)_100%)] p-6 text-white lg:grid-cols-[1.35fr_0.95fr]">
+            <div className="space-y-4">
+              <Badge className="w-fit border-white/20 bg-white/10 text-white">CRM home</Badge>
+              <div className="space-y-3">
+                <h1 className="text-3xl font-semibold tracking-tight">Contacts and follow-ups, first.</h1>
+                <p className="max-w-2xl text-sm leading-6 text-white/78">
+                  This CRM is running in a lightweight mode for small teams. Keep the contact list clean, finish today&apos;s tasks, and enable the sales pipeline when you&apos;re ready for deals or projects.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild className="bg-white text-slate-900 hover:bg-white/90">
+                  <Link to="/admin/crm/contacts/new">
+                    New Contact
+                    <Users className="ml-2 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10">
+                  <Link to="/admin/crm/settings">Enable Sales Pipeline</Link>
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <article className="rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur">
+                <p className="text-xs uppercase tracking-[0.2em] text-white/60">Total contacts</p>
+                <p className="mt-2 text-2xl font-semibold">{contacts.length.toLocaleString('en-IN')}</p>
+              </article>
+              <article className="rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur">
+                <p className="text-xs uppercase tracking-[0.2em] text-white/60">Tasks due today</p>
+                <p className="mt-2 text-2xl font-semibold">{dueActivities.length.toLocaleString('en-IN')}</p>
+              </article>
+            </div>
+          </div>
+        </div>
+
+        {crmCompatibility.highlightReports || crmCompatibility.highlightSegments ? (
+          <Card className={panelClassName()}>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Recommended next steps</CardTitle>
+              <CardDescription>Helpful when you have product catalog and repeat-buying customers.</CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {crmCompatibility.highlightReports ? (
+                <Link to="/admin/crm/reports" className="rounded-2xl border bg-muted/20 p-4 transition hover:border-primary/40 hover:bg-muted/30">
+                  <p className="font-medium">Customer Value Reports</p>
+                  <p className="mt-1 text-sm text-muted-foreground">See who spends the most and who may be churning.</p>
+                </Link>
+              ) : null}
+              {crmCompatibility.highlightSegments ? (
+                <Link to="/admin/crm/segments" className="rounded-2xl border bg-muted/20 p-4 transition hover:border-primary/40 hover:bg-muted/30">
+                  <p className="font-medium">Segment-based outreach</p>
+                  <p className="mt-1 text-sm text-muted-foreground">Group customers by value, recency, or city for manual campaigns.</p>
+                </Link>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+          <Card className={panelClassName()}>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Contacts</CardTitle>
+              <CardDescription>The most recent records are shown first.</CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-hidden">
+              <div className="space-y-2">
+                {recentContacts.map((contact) => (
+                  <Link
+                    key={contact.id}
+                    to={`/admin/crm/contacts/${contact.id}`}
+                    className="flex items-center justify-between gap-3 rounded-2xl border bg-muted/20 px-4 py-3 transition hover:border-primary/40 hover:bg-muted/30"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate font-medium">{getContactDisplayName(contact)}</p>
+                      <p className="truncate text-sm text-muted-foreground">
+                        {contact.company || contact.phone || contact.email || 'No extra details'}
+                      </p>
+                    </div>
+                    <div className="text-right text-sm text-muted-foreground">
+                      <p>{contact.type}</p>
+                      <p>{contact.lastContactedAt ? crmDate.format(new Date(contact.lastContactedAt)) : 'Not contacted yet'}</p>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className={panelClassName()}>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg">Today&apos;s tasks</CardTitle>
+              <CardDescription>Finish these before the day gets busy.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {dueActivities.length ? (
+                dueActivities.slice(0, 8).map((activity) => {
+                  const contact = contacts.find((item) => item.id === activity.contactId)
+                  return (
+                    <div key={activity.id} className="rounded-2xl border bg-muted/20 p-4">
+                      <p className="font-medium">{activity.subject}</p>
+                      <p className="text-sm text-muted-foreground">{contact ? getContactDisplayName(contact) : activity.contactId}</p>
+                      <p className="mt-2 text-xs text-muted-foreground">{formatActivityTime(activity)}</p>
+                    </div>
+                  )
+                })
+              ) : (
+                <div className="rounded-2xl border border-dashed p-6 text-sm text-muted-foreground">No due activities today.</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="dash-view space-y-6">
@@ -266,6 +396,29 @@ export default function CRMDashboard() {
           </div>
         </div>
       </div>
+
+      {crmCompatibility.highlightReports || crmCompatibility.highlightSegments ? (
+        <Card className={panelClassName()}>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Recommended next steps</CardTitle>
+            <CardDescription>Especially useful for product businesses that want to understand customer value.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 md:grid-cols-2">
+            {crmCompatibility.highlightReports ? (
+              <Link to="/admin/crm/reports" className="rounded-2xl border bg-muted/20 p-4 transition hover:border-primary/40 hover:bg-muted/30">
+                <p className="font-medium">Customer Value Reports</p>
+                <p className="mt-1 text-sm text-muted-foreground">Spot your top buyers, retention patterns, and churn risk.</p>
+              </Link>
+            ) : null}
+            {crmCompatibility.highlightSegments ? (
+              <Link to="/admin/crm/segments" className="rounded-2xl border bg-muted/20 p-4 transition hover:border-primary/40 hover:bg-muted/30">
+                <p className="font-medium">Segment-based outreach</p>
+                <p className="mt-1 text-sm text-muted-foreground">Group customers by value or city before manual WhatsApp campaigns.</p>
+              </Link>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <Card className={panelClassName()}>
         <CardHeader className="pb-4">

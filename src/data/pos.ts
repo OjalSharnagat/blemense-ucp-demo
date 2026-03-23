@@ -76,6 +76,7 @@ export interface POSOrder {
   roundOffAmount?: number;
   status: POSOrderStatus;
   completedAt: string;
+  crmContactId?: string;
   linkedInvoiceId?: string;
   customerName?: string;
   customerPhone?: string;
@@ -128,6 +129,7 @@ export interface POSCheckoutInput {
   amountTendered?: number;
   customerName?: string;
   customerPhone?: string;
+  crmContactId?: string;
   notes?: string;
   linkedInvoiceId?: string;
   generateLinkedInvoice?: boolean;

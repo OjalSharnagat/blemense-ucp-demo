@@ -91,6 +91,7 @@ type InvoiceBuilderState = {
 };
 
 type CRMInvoicePrefill = {
+  crmContactId?: string;
   contactName?: string;
   contactPhone?: string;
   contactEmail?: string;
@@ -102,6 +103,9 @@ type CRMInvoicePrefill = {
   contactPincode?: string;
   contactGstin?: string;
   contactPan?: string;
+  dealTitle?: string;
+  dealValue?: number;
+  invoiceType?: InvoiceType;
 };
 
 const today = new Date().toISOString().slice(0, 10);
@@ -322,6 +326,8 @@ export default function InvoiceBuilder() {
           : undefined;
       const initial = buildDefaultState(businessProfile, matchedParty ?? parties[0]);
       if (crmPrefill) {
+        const prefillValue = Number(crmPrefill.dealValue ?? 0);
+        const prefillRate = getBusinessModeConfig(businessProfile).showTaxColumns ? 18 : 0;
         initial.buyer = {
           ...initial.buyer,
           name: crmPrefill.contactName?.trim() || initial.buyer.name,
@@ -336,6 +342,19 @@ export default function InvoiceBuilder() {
           pan: crmPrefill.contactPan?.trim() || initial.buyer.pan,
         };
         initial.placeOfSupply = crmPrefill.contactState?.trim() || initial.placeOfSupply;
+        initial.type = crmPrefill.invoiceType ?? initial.type;
+        if (crmPrefill.dealTitle || Number.isFinite(prefillValue)) {
+          initial.lineItems = [
+            {
+              ...emptyLineItem(prefillRate),
+              description: crmPrefill.dealTitle?.trim() || crmPrefill.contactCompany?.trim() || crmPrefill.contactName?.trim() || 'CRM deal',
+              quantity: 1,
+              unitPrice: Number.isFinite(prefillValue) ? prefillValue : 0,
+              gstRate: prefillRate
+            }
+          ];
+          initial.notes = crmPrefill.dealTitle ? `Deal: ${crmPrefill.dealTitle}` : initial.notes;
+        }
       }
       setForm(initial);
       setSelectedPartyId(matchedParty?.id ?? "");
@@ -674,6 +693,7 @@ export default function InvoiceBuilder() {
       notes: form.notes,
       terms: form.terms,
       linkedInvoiceId: form.linkedInvoiceId,
+      crmContactId: crmPrefill?.crmContactId,
       eWayBillNumber: showEWaySection ? form.eway.eWayBillNumber || undefined : undefined,
       eWayBillDate: showEWaySection ? form.eway.eWayBillDate || undefined : undefined,
       vehicleNumber: showEWaySection ? form.eway.vehicleNumber || undefined : undefined,

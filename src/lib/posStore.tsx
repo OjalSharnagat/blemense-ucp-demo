@@ -703,6 +703,7 @@ export function PosStoreProvider({ children }: PropsWithChildren) {
           roundOffAmount: pricing.roundOffAmount,
           status: "COMPLETED",
           completedAt,
+          crmContactId: paymentDetails?.crmContactId,
           customerName: paymentDetails?.customerName?.trim() || undefined,
           customerPhone: paymentDetails?.customerPhone?.trim() || undefined,
           notes: paymentDetails?.notes?.trim() || "",
@@ -740,6 +741,7 @@ export function PosStoreProvider({ children }: PropsWithChildren) {
             orderId: order.id,
             linkedInvoiceId: paymentDetails.linkedInvoiceId,
             customerId: undefined,
+            crmContactId: paymentDetails.crmContactId,
           });
 
           addPayment({
@@ -753,6 +755,7 @@ export function PosStoreProvider({ children }: PropsWithChildren) {
               paymentMode === "SPLIT"
                 ? `Split POS settlement: cash ${paymentBreakdown.cash}, upi ${paymentBreakdown.upi}, card ${paymentBreakdown.card}, other ${paymentBreakdown.other}.`
                 : "POS settlement",
+            crmContactId: paymentDetails.crmContactId,
           });
 
           order.linkedInvoiceId = invoice.id;

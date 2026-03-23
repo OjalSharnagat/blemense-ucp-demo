@@ -35,6 +35,7 @@ import {
   getContactAvatarClass,
   getContactDisplayName,
   getContactInitials,
+  getDealTerminology,
   isActivityOverdue,
   panelClassName,
   ratingVariant,
@@ -108,6 +109,8 @@ function buildDraft(activity?: Activity): ActivityFormState {
 
 export default function ActivitiesView() {
   const { activities, contacts, deals, settings, getDueActivities, completeActivity, logActivity, updateActivity } = useCRMStore()
+  const showTeamFeatures = settings.enableTeamFeatures
+  const dealTerm = getDealTerminology(settings)
   const dueActivities = getDueActivities()
 
   const [activeTab, setActiveTab] = useState<ActivityTab>('UPCOMING')
@@ -567,15 +570,15 @@ export default function ActivitiesView() {
               </div>
 
               <div className="space-y-2">
-                <label className="block text-sm font-medium">Deal search</label>
+                <label className="block text-sm font-medium">{dealTerm.singular} search</label>
                 <Input
                   value={dealSearch}
                   onChange={(event) => setDealSearch(event.target.value)}
-                  placeholder="Optional: search by deal title or company"
+                  placeholder={`Optional: search by ${dealTerm.singular.toLowerCase()} title or company`}
                 />
-                <label className="block text-sm font-medium">Deal</label>
+                <label className="block text-sm font-medium">{dealTerm.singular}</label>
                 <Select value={activityDraft.dealId} onChange={(event) => setActivityDraft((prev) => ({ ...prev, dealId: event.target.value }))}>
-                  <option value="">No deal linked</option>
+                  <option value="">{`No ${dealTerm.singular.toLowerCase()} linked`}</option>
                   {dealMatches.map((deal) => (
                     <option key={deal.id} value={deal.id}>
                       {deal.title}{contactById.get(deal.contactId)?.company ? ` · ${contactById.get(deal.contactId)?.company}` : ''}
@@ -725,12 +728,14 @@ export default function ActivitiesView() {
 
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border bg-muted/20 p-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Assigned to</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{showTeamFeatures ? 'Assigned to' : 'Owner'}</p>
                     <p className="mt-2 text-sm font-semibold">{selectedActivity.createdBy || settings.defaultAssignee}</p>
                   </div>
                   <div className="rounded-2xl border bg-muted/20 p-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">Deal</p>
-                    <p className="mt-2 text-sm font-semibold">{selectedActivity.dealId ? dealById.get(selectedActivity.dealId)?.title || 'Linked deal' : 'No deal linked'}</p>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground">{dealTerm.singular}</p>
+                    <p className="mt-2 text-sm font-semibold">
+                      {selectedActivity.dealId ? dealById.get(selectedActivity.dealId)?.title || `Linked ${dealTerm.singular.toLowerCase()}` : `No ${dealTerm.singular.toLowerCase()} linked`}
+                    </p>
                   </div>
                 </div>
 

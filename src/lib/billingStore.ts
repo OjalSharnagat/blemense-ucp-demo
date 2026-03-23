@@ -871,6 +871,7 @@ export function BillingStoreProvider({ children }: PropsWithChildren) {
           ...paymentInput,
           id: paymentInput.id ?? `pay-${Date.now().toString(36)}`,
           customerId: paymentInput.customerId ?? sourceInvoice?.customerId,
+          crmContactId: paymentInput.crmContactId ?? sourceInvoice?.crmContactId,
           orderId: paymentInput.orderId ?? sourceInvoice?.orderId,
         };
 

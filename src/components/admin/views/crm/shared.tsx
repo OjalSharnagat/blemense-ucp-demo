@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import type { Activity, Contact, Deal } from '@/data/crm'
+import type { Activity, Contact, Deal, CRMSettings } from '@/data/crm'
 import { cn } from '@/lib/utils'
 
 export const crmMoney = new Intl.NumberFormat('en-IN', {
@@ -48,7 +48,7 @@ export const contactTypeLabel: Record<Contact['type'], string> = {
   PARTNER: 'Partner'
 }
 
-export const dealStageLabel: Record<Deal['stage'], string> = {
+const DEFAULT_DEAL_STAGE_LABELS: Record<string, string> = {
   LEAD: 'Lead',
   QUALIFIED: 'Qualified',
   PROPOSAL: 'Proposal',
@@ -57,7 +57,9 @@ export const dealStageLabel: Record<Deal['stage'], string> = {
   CLOSED_LOST: 'Lost'
 }
 
-export const dealStageStyles: Record<Deal['stage'], string> = {
+export const dealStageLabel: Record<string, string> = DEFAULT_DEAL_STAGE_LABELS
+
+export const dealStageStyles: Record<string, string> = {
   LEAD: 'border-slate-200 bg-slate-100 text-slate-700',
   QUALIFIED: 'border-cyan-200 bg-cyan-50 text-cyan-800',
   PROPOSAL: 'border-blue-200 bg-blue-50 text-blue-800',
@@ -66,13 +68,25 @@ export const dealStageStyles: Record<Deal['stage'], string> = {
   CLOSED_LOST: 'border-rose-200 bg-rose-50 text-rose-800'
 }
 
-export const dealStageAccent: Record<Deal['stage'], string> = {
+export const dealStageAccent: Record<string, string> = {
   LEAD: '#94a3b8',
   QUALIFIED: '#06b6d4',
   PROPOSAL: '#2563eb',
   NEGOTIATION: '#f59e0b',
   CLOSED_WON: '#10b981',
   CLOSED_LOST: '#ef4444'
+}
+
+export function getDealTerminology(settings?: Pick<CRMSettings, 'dealTerminology'>): { singular: string; plural: string } {
+  switch (settings?.dealTerminology) {
+    case 'PROJECT':
+      return { singular: 'Project', plural: 'Projects' }
+    case 'ENGAGEMENT':
+      return { singular: 'Engagement', plural: 'Engagements' }
+    case 'DEAL':
+    default:
+      return { singular: 'Deal', plural: 'Deals' }
+  }
 }
 
 export const activityTypeLabel: Record<Activity['type'], string> = {
@@ -289,6 +303,25 @@ export function stageVariant(stage: Deal['stage']): 'default' | 'secondary' | 'd
   if (stage === 'NEGOTIATION') return 'warning'
   if (stage === 'PROPOSAL') return 'default'
   return 'secondary'
+}
+
+export function getStageLabel(stage: string): string {
+  return dealStageLabel[stage] || stage.replace(/_/g, ' ')
+}
+
+export function getSourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    WALK_IN: 'Walk-in',
+    REFERRAL: 'Referral',
+    WEBSITE: 'Website',
+    SOCIAL_MEDIA: 'Social media',
+    COLD_CALL: 'Cold call',
+    EXHIBITION: 'Exhibition',
+    JUSTDIAL: 'Justdial',
+    INDIAMART: 'IndiaMart',
+    OTHER: 'Other'
+  }
+  return labels[source] || source.replace(/_/g, ' ')
 }
 
 export function panelClassName(className?: string) {

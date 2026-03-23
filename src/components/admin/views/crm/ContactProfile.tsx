@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -30,6 +30,7 @@ import {
 import { useCRMStore } from '@/lib/crmStore'
 import { useBillingStore } from '@/lib/billingStore'
 import { usePosStore } from '@/lib/posStore'
+import { INDIAN_STATES } from '@/data/gst'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -46,6 +47,8 @@ import {
   getContactDisplayName,
   getContactInitials,
   getContactReference,
+  getDealTerminology,
+  getSourceLabel,
   panelClassName,
   ratingVariant,
   ScoreBadge,
@@ -54,6 +57,7 @@ import {
   typeVariant
 } from './shared'
 import type { Activity, Contact, Deal } from '@/data/crm'
+import type { CustomContactField } from '@/data/crm'
 import type { Invoice } from '@/data/billing'
 import type { POSOrder } from '@/data/pos'
 
@@ -255,6 +259,25 @@ function isFutureScheduled(activity: Activity): boolean {
   return new Date(activity.scheduledAt).getTime() >= Date.now()
 }
 
+function customFieldInputKind(field: CustomContactField['type']): 'text' | 'number' | 'date' | 'select' | 'checkbox' {
+  if (field === 'NUMBER') return 'number'
+  if (field === 'DATE') return 'date'
+  if (field === 'DROPDOWN') return 'select'
+  if (field === 'CHECKBOX') return 'checkbox'
+  return 'text'
+}
+
+function parseCustomFieldValue(field: CustomContactField | { type: 'TEXT' | 'NUMBER' | 'DATE' | 'DROPDOWN' | 'CHECKBOX' }, raw: string): string | number | boolean | null | undefined {
+  const value = raw.trim()
+  if (!value && field.type !== 'CHECKBOX') return undefined
+  if (field.type === 'NUMBER') {
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : undefined
+  }
+  if (field.type === 'CHECKBOX') return value === 'true'
+  return value || undefined
+}
+
 export default function ContactProfile() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -274,6 +297,8 @@ export default function ContactProfile() {
     computeContactScore,
     getContactTimeline
   } = useCRMStore()
+  const showTeamFeatures = settings.enableTeamFeatures
+  const dealTerm = getDealTerminology(settings)
   const { invoices, payments } = useBillingStore()
   const { orders: posOrders } = usePosStore()
 
@@ -291,8 +316,18 @@ export default function ContactProfile() {
   const [editDraft, setEditDraft] = useState<EditDraft | null>(contact ? buildEditDraft(contact) : null)
   const [activityFilter, setActivityFilter] = useState<ActivityFilter>('ALL')
   const [activityDraft, setActivityDraft] = useState<ActivityDraft>(buildActivityDraft())
-  const [dealDraft, setDealDraft] = useState<DealDraft>(buildDealDraft(settings.defaultAssignee))
+  const [dealDraft, setDealDraft] = useState<DealDraft>(buildDealDraft(showTeamFeatures ? settings.defaultAssignee : ''))
   const [customDraft, setCustomDraft] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    if (!contact) return
+    setCustomDraft(
+      Object.entries(contact.customFields).reduce<Record<string, string>>((acc, [key, value]) => {
+        acc[key] = value === null || value === undefined ? '' : String(value)
+        return acc
+      }, {})
+    )
+  }, [contact?.id])
 
   const currentDeal = useMemo(
     () => (dealDetailId ? deals.find((deal) => deal.id === dealDetailId) ?? null : null),
@@ -373,9 +408,26 @@ export default function ContactProfile() {
     .sort()
     .slice(-1)[0]
 
-  const editableCustomFieldKeys = useMemo(() => {
+  const editableCustomFieldDefs = useMemo(() => {
     if (!contact) return []
-    return [...new Set([...settings.customContactFields, ...Object.keys(contact.customFields)])].sort((a, b) => a.localeCompare(b))
+    const configured = settings.customContactFields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      type: field.type,
+      required: field.required,
+      options: field.options || []
+    }))
+    const configuredIds = new Set(configured.map((field) => field.id))
+    const customKeys = Object.keys(contact.customFields)
+      .filter((key) => !configuredIds.has(key))
+      .map((key) => ({
+        id: key,
+        label: key.replace(/([A-Z])/g, ' $1').replace(/[_-]/g, ' ').trim(),
+        type: 'TEXT' as const,
+        required: false,
+        options: []
+      }))
+    return [...configured, ...customKeys].sort((a, b) => a.label.localeCompare(b.label))
   }, [contact, settings.customContactFields])
 
   const mergeCandidates = useMemo(
@@ -452,7 +504,7 @@ export default function ContactProfile() {
       gstin: editDraft.gstin.trim() || undefined,
       pan: editDraft.pan.trim() || undefined,
       source: editDraft.source || undefined,
-      assignedTo: editDraft.assignedTo.trim() || undefined,
+      assignedTo: showTeamFeatures ? editDraft.assignedTo.trim() || undefined : undefined,
       status: editDraft.status,
       rating: editDraft.type === 'LEAD' ? (editDraft.rating || undefined) : undefined,
       type: editDraft.type,
@@ -481,7 +533,7 @@ export default function ContactProfile() {
   }
 
   const handleAssignedCommit = () => {
-    updateContact({ ...contact, assignedTo: assignedDraft.trim() || undefined })
+    updateContact({ ...contact, assignedTo: showTeamFeatures ? assignedDraft.trim() || undefined : undefined })
   }
 
   const handleConvertLead = () => {
@@ -568,7 +620,7 @@ export default function ContactProfile() {
       stage: dealDraft.stage,
       probability: Math.max(0, Math.min(100, Number.isFinite(probability) ? probability : 0)),
       expectedCloseDate,
-      assignedTo: dealDraft.assignedTo.trim() || settings.defaultAssignee,
+      assignedTo: showTeamFeatures ? dealDraft.assignedTo.trim() || settings.defaultAssignee : undefined,
       productIds: dealDraft.productIds
         .split(',')
         .map((entry) => entry.trim())
@@ -578,7 +630,7 @@ export default function ContactProfile() {
       tags: [...contact.tags],
       activities: []
     })
-    setDealDraft(buildDealDraft(settings.defaultAssignee))
+    setDealDraft(buildDealDraft(showTeamFeatures ? settings.defaultAssignee : ''))
     setNewDealOpen(false)
   }
 
@@ -594,10 +646,11 @@ export default function ContactProfile() {
   }
 
   const handleSaveCustomFields = () => {
-    const nextCustomFields = editableCustomFieldKeys.reduce<Record<string, string | number | boolean | null | undefined>>((acc, key) => {
-      const value = (customDraft[key] ?? String(contact.customFields[key] ?? '')).trim()
-      if (!value) return acc
-      acc[key] = value
+    const nextCustomFields = editableCustomFieldDefs.reduce<Record<string, string | number | boolean | null | undefined>>((acc, field) => {
+      const value = customDraft[field.id] ?? String(contact.customFields[field.id] ?? '')
+      const parsed = parseCustomFieldValue(field, value)
+      if (parsed === undefined) return acc
+      acc[field.id] = parsed
       return acc
     }, {})
 
@@ -645,14 +698,14 @@ export default function ContactProfile() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">All deals linked to this contact.</p>
+          <p className="text-sm text-muted-foreground">All {dealTerm.plural.toLowerCase()} linked to this contact.</p>
           <p className="text-xs text-muted-foreground">
             {openDeals.length} open, {wonDeals.length} won, {lostDeals.length} lost.
           </p>
         </div>
         <Button type="button" onClick={() => setNewDealOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
-          New Deal
+          New {dealTerm.singular}
         </Button>
       </div>
 
@@ -677,13 +730,13 @@ export default function ContactProfile() {
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
                 <span className="font-medium">{crmMoney.format(deal.value)}</span>
                 <span className="text-muted-foreground">{deal.probability}% probability</span>
-                {deal.assignedTo ? <span className="text-muted-foreground">Assigned to {deal.assignedTo}</span> : null}
+                {showTeamFeatures && deal.assignedTo ? <span className="text-muted-foreground">Assigned to {deal.assignedTo}</span> : null}
               </div>
               {deal.notes ? <p className="mt-2 text-sm text-muted-foreground">{deal.notes}</p> : null}
             </button>
           ))
         ) : (
-          <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">No deals linked to this contact yet.</div>
+          <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">No {dealTerm.plural.toLowerCase()} linked to this contact yet.</div>
         )}
       </div>
     </div>
@@ -785,7 +838,26 @@ export default function ContactProfile() {
           <p className="text-sm text-muted-foreground">Invoice history and payment trail from the billing module.</p>
         </div>
         <Button asChild>
-          <Link to="/admin/billing/new">
+          <Link
+            to="/admin/billing/new"
+            state={{
+              crmContactId: contact.id,
+              contactName: contact.displayName,
+              contactPhone: contact.phone || contact.whatsapp,
+              contactEmail: contact.email,
+              contactCompany: contact.company,
+              contactAddress: contact.address,
+              contactCity: contact.city,
+              contactState: contact.state,
+              contactStateCode: contact.state
+                ? INDIAN_STATES.find((state) => state.name.trim().toLowerCase() === contact.state?.trim().toLowerCase())?.tinCode || ''
+                : '',
+              contactPincode: contact.pincode,
+              contactGstin: contact.gstin,
+              contactPan: contact.pan,
+              invoiceType: 'TAX_INVOICE'
+            }}
+          >
             <BadgeDollarSign className="mr-2 h-4 w-4" />
             Create Invoice
           </Link>
@@ -945,16 +1017,53 @@ export default function ContactProfile() {
         </Button>
       </div>
 
-      {editableCustomFieldKeys.length ? (
+      {editableCustomFieldDefs.length ? (
         <div className="grid gap-4 md:grid-cols-2">
-          {editableCustomFieldKeys.map((field) => (
-            <div key={field} className="space-y-2 rounded-2xl border bg-muted/20 p-4">
-              <label className="text-sm font-medium capitalize">{field.replace(/([A-Z])/g, ' $1')}</label>
-              <Input
-                value={customDraft[field] ?? String(contact.customFields[field] ?? '')}
-                onChange={(event) => setCustomDraft((prev) => ({ ...prev, [field]: event.target.value }))}
-                placeholder={`Enter ${field.replace(/([A-Z])/g, ' $1').toLowerCase()}`}
-              />
+          {editableCustomFieldDefs.map((field) => (
+            <div key={field.id} className="space-y-2 rounded-2xl border bg-muted/20 p-4">
+              <label className="text-sm font-medium">
+                {field.label}
+                {field.required ? <span className="ml-1 text-rose-600">*</span> : null}
+              </label>
+              {customFieldInputKind(field.type) === 'number' ? (
+                <Input
+                  type="number"
+                  value={customDraft[field.id] ?? String(contact.customFields[field.id] ?? '')}
+                  onChange={(event) => setCustomDraft((prev) => ({ ...prev, [field.id]: event.target.value }))}
+                />
+              ) : customFieldInputKind(field.type) === 'date' ? (
+                <Input
+                  type="date"
+                  value={customDraft[field.id] ?? String(contact.customFields[field.id] ?? '')}
+                  onChange={(event) => setCustomDraft((prev) => ({ ...prev, [field.id]: event.target.value }))}
+                />
+              ) : customFieldInputKind(field.type) === 'select' ? (
+                <Select
+                  value={customDraft[field.id] ?? String(contact.customFields[field.id] ?? '')}
+                  onChange={(event) => setCustomDraft((prev) => ({ ...prev, [field.id]: event.target.value }))}
+                >
+                  <option value="">Select {field.label.toLowerCase()}</option>
+                  {(field.options || []).map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </Select>
+              ) : customFieldInputKind(field.type) === 'checkbox' ? (
+                <Select
+                  value={customDraft[field.id] ?? String(contact.customFields[field.id] ?? 'false')}
+                  onChange={(event) => setCustomDraft((prev) => ({ ...prev, [field.id]: event.target.value }))}
+                >
+                  <option value="true">Yes</option>
+                  <option value="false">No</option>
+                </Select>
+              ) : (
+                <Input
+                  value={customDraft[field.id] ?? String(contact.customFields[field.id] ?? '')}
+                  onChange={(event) => setCustomDraft((prev) => ({ ...prev, [field.id]: event.target.value }))}
+                  placeholder={`Enter ${field.label.toLowerCase()}`}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -966,7 +1075,7 @@ export default function ContactProfile() {
 
   const tabs: Array<{ id: TabId; label: string; icon: typeof FileText }> = [
     { id: 'timeline', label: 'Timeline', icon: FileText },
-    { id: 'deals', label: 'Deals', icon: Target },
+    { id: 'deals', label: dealTerm.plural, icon: Target },
     { id: 'activities', label: 'Activities', icon: CalendarClock },
     { id: 'billing', label: 'Orders & Billing', icon: BadgeDollarSign },
     { id: 'pos', label: 'POS History', icon: ShoppingBag },
@@ -1121,26 +1230,30 @@ export default function ContactProfile() {
                   </div>
                 ) : null}
 
-                <div className="flex items-center gap-2 rounded-2xl border bg-muted/20 p-3">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <span>Assigned to {assignedDraft || contact.assignedTo || 'Unassigned'}</span>
-                </div>
+                {showTeamFeatures ? (
+                  <>
+                    <div className="flex items-center gap-2 rounded-2xl border bg-muted/20 p-3">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span>Assigned to {assignedDraft || contact.assignedTo || 'Unassigned'}</span>
+                    </div>
 
-                <div className="rounded-2xl border bg-muted/20 p-3">
-                  <label className="mb-2 block text-xs uppercase tracking-wide text-muted-foreground">Assigned To</label>
-                  <Input
-                    value={assignedDraft}
-                    onChange={(event) => handleAssignedChange(event.target.value)}
-                    onBlur={handleAssignedCommit}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter') {
-                        event.preventDefault()
-                        handleAssignedCommit()
-                      }
-                    }}
-                    placeholder="Sales owner"
-                  />
-                </div>
+                    <div className="rounded-2xl border bg-muted/20 p-3">
+                      <label className="mb-2 block text-xs uppercase tracking-wide text-muted-foreground">Assigned To</label>
+                      <Input
+                        value={assignedDraft}
+                        onChange={(event) => handleAssignedChange(event.target.value)}
+                        onBlur={handleAssignedCommit}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault()
+                            handleAssignedCommit()
+                          }
+                        }}
+                        placeholder="Sales owner"
+                      />
+                    </div>
+                  </>
+                ) : null}
 
                 <div className="rounded-2xl border bg-muted/20 p-3">
                   <label className="mb-2 block text-xs uppercase tracking-wide text-muted-foreground">Tags</label>
@@ -1349,21 +1462,28 @@ export default function ContactProfile() {
                 <label className="mb-1 block text-sm font-medium">Email</label>
                 <Input value={editDraft?.email ?? ''} onChange={(event) => setEditDraft((prev) => (prev ? { ...prev, email: event.target.value } : prev))} />
               </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium">Assigned to</label>
-                <Input value={editDraft?.assignedTo ?? ''} onChange={(event) => setEditDraft((prev) => (prev ? { ...prev, assignedTo: event.target.value } : prev))} />
-              </div>
+              {showTeamFeatures ? (
+                <div>
+                  <label className="mb-1 block text-sm font-medium">Assigned to</label>
+                  <Select value={editDraft?.assignedTo ?? ''} onChange={(event) => setEditDraft((prev) => (prev ? { ...prev, assignedTo: event.target.value } : prev))}>
+                    <option value="">Use default assignee</option>
+                    {(settings.teamMembers.length ? settings.teamMembers : [settings.defaultAssignee]).map((member) => (
+                      <option key={member} value={member}>
+                        {member}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              ) : null}
               <div>
                 <label className="mb-1 block text-sm font-medium">Source</label>
                 <Select value={editDraft?.source ?? ''} onChange={(event) => setEditDraft((prev) => (prev ? { ...prev, source: event.target.value as Contact['source'] | '' } : prev))}>
                   <option value="">Not set</option>
-                  <option value="WALK_IN">Walk-in</option>
-                  <option value="REFERRAL">Referral</option>
-                  <option value="WEBSITE">Website</option>
-                  <option value="SOCIAL_MEDIA">Social media</option>
-                  <option value="COLD_CALL">Cold call</option>
-                  <option value="EXHIBITION">Exhibition</option>
-                  <option value="OTHER">Other</option>
+                  {settings.leadSources.map((source) => (
+                    <option key={source} value={source}>
+                      {getSourceLabel(source)}
+                    </option>
+                  ))}
                 </Select>
               </div>
               <div className="md:col-span-2">
@@ -1448,8 +1568,8 @@ export default function ContactProfile() {
         <DialogOverlay />
         <DialogContent className="w-[min(94vw,44rem)] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>New deal</DialogTitle>
-            <DialogDescription>Start a deal directly from the contact profile.</DialogDescription>
+            <DialogTitle>New {dealTerm.singular}</DialogTitle>
+            <DialogDescription>Start a {dealTerm.singular.toLowerCase()} directly from the contact profile.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 md:grid-cols-2">
             <div className="md:col-span-2">
@@ -1479,10 +1599,19 @@ export default function ContactProfile() {
               <label className="mb-1 block text-sm font-medium">Expected close date</label>
               <Input type="date" value={dealDraft.expectedCloseDate} onChange={(event) => setDealDraft((prev) => ({ ...prev, expectedCloseDate: event.target.value }))} />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Assigned to</label>
-              <Input value={dealDraft.assignedTo} onChange={(event) => setDealDraft((prev) => ({ ...prev, assignedTo: event.target.value }))} />
-            </div>
+            {showTeamFeatures ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium">Assigned to</label>
+                <Select value={dealDraft.assignedTo} onChange={(event) => setDealDraft((prev) => ({ ...prev, assignedTo: event.target.value }))}>
+                  <option value="">Use default assignee</option>
+                  {(settings.teamMembers.length ? settings.teamMembers : [settings.defaultAssignee]).map((member) => (
+                    <option key={member} value={member}>
+                      {member}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
             <div>
               <label className="mb-1 block text-sm font-medium">Product IDs</label>
               <Input value={dealDraft.productIds} onChange={(event) => setDealDraft((prev) => ({ ...prev, productIds: event.target.value }))} placeholder="prod_001, prod_002" />
@@ -1502,7 +1631,7 @@ export default function ContactProfile() {
               Cancel
             </Button>
             <Button type="button" onClick={handleCreateDeal}>
-              Create deal
+              Create {dealTerm.singular.toLowerCase()}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1515,7 +1644,7 @@ export default function ContactProfile() {
             <>
               <DialogHeader>
                 <DialogTitle>{currentDeal.title}</DialogTitle>
-                <DialogDescription>Deal details and a quick path to change the stage.</DialogDescription>
+                <DialogDescription>{dealTerm.singular} details and a quick path to change the stage.</DialogDescription>
               </DialogHeader>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border bg-muted/20 p-4">
@@ -1538,8 +1667,16 @@ export default function ContactProfile() {
                   </Select>
                 </div>
                 <div>
-                  <p className="mb-1 block text-sm font-medium">Assigned to</p>
-                  <div className="rounded-2xl border bg-muted/20 p-3 text-sm">{currentDeal.assignedTo || 'Unassigned'}</div>
+                  {showTeamFeatures ? (
+                    <>
+                  {showTeamFeatures ? (
+                    <>
+                      <p className="mb-1 block text-sm font-medium">Assigned to</p>
+                      <div className="rounded-2xl border bg-muted/20 p-3 text-sm">{currentDeal.assignedTo || 'Unassigned'}</div>
+                    </>
+                  ) : null}
+                    </>
+                  ) : null}
                 </div>
                 <div className="md:col-span-2">
                   <p className="mb-1 block text-sm font-medium">Expected close</p>

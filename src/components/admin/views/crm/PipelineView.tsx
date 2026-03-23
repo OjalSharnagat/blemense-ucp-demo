@@ -24,12 +24,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { INDIAN_STATES } from '@/data/gst'
 import {
   crmDate,
   crmDateTime,
   crmMoney,
   dealStageAccent,
   dealStageLabel,
+  getDealTerminology,
   getContactAvatarClass,
   getContactDisplayName,
   getContactInitials,
@@ -37,6 +39,7 @@ import {
   stageVariant
 } from './shared'
 import type { Contact, Deal } from '@/data/crm'
+import type { InvoiceType } from '@/data/billing'
 
 type ViewMode = 'kanban' | 'table'
 type SortField = 'stage' | 'value' | 'closeDate' | 'probability' | 'daysInStage' | 'contact' | 'updatedAt'
@@ -63,6 +66,7 @@ type LossFormState = {
   notes: string
 }
 type InvoicePrefill = {
+  crmContactId?: string
   contactName?: string
   contactPhone?: string
   contactEmail?: string
@@ -75,6 +79,9 @@ type InvoicePrefill = {
   contactGstin?: string
   contactPan?: string
   dealId?: string
+  dealTitle?: string
+  dealValue?: number
+  invoiceType?: InvoiceType
 }
 
 const VIEW_STORAGE_KEY = 'blemense-crm-pipeline-view'
@@ -141,6 +148,7 @@ function formatDate(date?: string): string {
 
 function buildInvoicePrefill(contact: Contact, deal: Deal): InvoicePrefill {
   return {
+    crmContactId: contact.id,
     contactName: contact.displayName || getContactDisplayName(contact),
     contactPhone: contact.phone || contact.whatsapp,
     contactEmail: contact.email,
@@ -148,11 +156,16 @@ function buildInvoicePrefill(contact: Contact, deal: Deal): InvoicePrefill {
     contactAddress: contact.address,
     contactCity: contact.city,
     contactState: contact.state,
-    contactStateCode: '',
+    contactStateCode: contact.state
+      ? INDIAN_STATES.find((state) => state.name.trim().toLowerCase() === contact.state?.trim().toLowerCase())?.tinCode || ''
+      : '',
     contactPincode: contact.pincode,
     contactGstin: contact.gstin,
     contactPan: contact.pan,
-    dealId: deal.id
+    dealId: deal.id,
+    dealTitle: deal.title,
+    dealValue: deal.value,
+    invoiceType: 'TAX_INVOICE'
   }
 }
 
@@ -169,6 +182,8 @@ export default function PipelineView() {
     closeDeal,
     logActivity
   } = useCRMStore()
+  const showTeamFeatures = settings.enableTeamFeatures
+  const dealTerm = getDealTerminology(settings)
 
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     if (typeof window === 'undefined') return 'kanban'
@@ -244,7 +259,7 @@ export default function PipelineView() {
       })
       .filter(({ deal, contact, combinedTags, score }) => {
         if (filteredStage && deal.stage !== filteredStage) return false
-        if (assignedFilter !== 'ALL' && (deal.assignedTo || '') !== assignedFilter) return false
+        if (showTeamFeatures && assignedFilter !== 'ALL' && (deal.assignedTo || '') !== assignedFilter) return false
         if (sourceFilter !== 'ALL' && (deal.source || '') !== sourceFilter) return false
         if (tagFilter.length && !tagFilter.every((tag) => combinedTags.includes(tag))) return false
 
@@ -254,7 +269,7 @@ export default function PipelineView() {
             deal.title,
             getContactDisplayName(contact || ({} as Contact)),
             contact?.company,
-            deal.assignedTo,
+            showTeamFeatures ? deal.assignedTo : '',
             deal.source,
             deal.tags.join(' ')
           ]
@@ -268,7 +283,7 @@ export default function PipelineView() {
         const ts = new Date(deal.expectedCloseDate).getTime()
         return !Number.isNaN(ts) && (!closeFrom || ts >= new Date(closeFrom).setHours(0, 0, 0, 0)) && (!closeTo || ts <= new Date(closeTo).setHours(23, 59, 59, 999))
       })
-  }, [assignedFilter, closeFrom, closeTo, contactById, deals, filteredStage, search, sourceFilter, tagFilter])
+  }, [assignedFilter, closeFrom, closeTo, contactById, deals, filteredStage, search, sourceFilter, tagFilter, showTeamFeatures])
 
   const availableTags = useMemo(() => {
     return [...new Set(dealSummaries.flatMap(({ deal, contact }) => [...deal.tags, ...(contact?.tags ?? [])]).filter(Boolean))].sort((a, b) =>
@@ -370,7 +385,7 @@ export default function PipelineView() {
       stage: source.stage,
       probability: String(source.probability),
       expectedCloseDate: source.expectedCloseDate || '',
-      assignedTo: source.assignedTo || '',
+      assignedTo: showTeamFeatures ? source.assignedTo || '' : '',
       notes: source.notes || ''
     })
     setDealSearch(contactById.get(source.contactId) ? getContactDisplayName(contactById.get(source.contactId)!) : '')
@@ -431,7 +446,7 @@ export default function PipelineView() {
       stage: dealForm.stage,
       probability: Math.max(0, Math.min(100, Number(dealForm.probability || 0))),
       expectedCloseDate: dealForm.expectedCloseDate || undefined,
-      assignedTo: dealForm.assignedTo.trim() || undefined,
+      assignedTo: showTeamFeatures ? dealForm.assignedTo.trim() || undefined : undefined,
       productIds: [] as string[],
       notes: dealForm.notes.trim() || undefined,
       source: contact.source,
@@ -460,7 +475,7 @@ export default function PipelineView() {
         value: payload.value,
         probability: payload.probability,
         expectedCloseDate: payload.expectedCloseDate,
-        assignedTo: payload.assignedTo,
+        assignedTo: showTeamFeatures ? payload.assignedTo : undefined,
         notes: payload.notes,
         source: payload.source,
         tags: payload.tags
@@ -509,11 +524,11 @@ export default function PipelineView() {
     setLossForm({ reason: '', notes: '' })
   }
 
-  const createInvoiceFromDeal = () => {
+  const createInvoiceFromDeal = (invoiceType: InvoiceType = 'TAX_INVOICE') => {
     if (!winningDeal) return
     const contact = contactById.get(winningDeal.contactId)
     if (!contact) return
-    navigate('/admin/billing/new', { state: buildInvoicePrefill(contact, winningDeal) })
+    navigate('/admin/billing/new', { state: { ...buildInvoicePrefill(contact, winningDeal), invoiceType } })
   }
 
   const stageAgeClass = (days: number) => (days > stageThreshold ? 'text-amber-700' : 'text-muted-foreground')
@@ -574,29 +589,31 @@ export default function PipelineView() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between gap-2 rounded-2xl border bg-background/70 p-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold', assignedAvatar)}>{initials}</div>
-              <div className="min-w-0">
-                <p className="text-xs text-muted-foreground">Assigned to</p>
-                <p className="truncate text-sm font-medium">{assigned}</p>
+          {showTeamFeatures ? (
+            <div className="flex items-center justify-between gap-2 rounded-2xl border bg-background/70 p-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold', assignedAvatar)}>{initials}</div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Assigned to</p>
+                  <p className="truncate text-sm font-medium">{assigned}</p>
+                </div>
               </div>
+              <Button type="button" size="sm" variant="ghost" asChild className="shrink-0 px-2">
+                <Link to={`/admin/crm/contacts/${deal.contactId}`}>
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
+              </Button>
             </div>
-            <Button type="button" size="sm" variant="ghost" asChild className="shrink-0 px-2">
-              <Link to={`/admin/crm/contacts/${deal.contactId}`}>
-                <ChevronRight className="h-4 w-4" />
-              </Link>
-            </Button>
-          </div>
+          ) : null}
 
           <div className="grid grid-cols-2 gap-2 pt-1">
             <Button type="button" variant="outline" size="sm" className="w-full justify-center px-2" onClick={() => { setActivityDealId(deal.id); setActivityForm(initialActivityForm()); setActivityModalOpen(true) }} title="Log activity">
               <Activity className="h-4 w-4" />
               <span className="sr-only">Log activity</span>
             </Button>
-            <Button type="button" variant="outline" size="sm" className="w-full justify-center px-2" onClick={() => openEditDeal(deal.id)} title="Edit deal">
+            <Button type="button" variant="outline" size="sm" className="w-full justify-center px-2" onClick={() => openEditDeal(deal.id)} title={`Edit ${dealTerm.singular.toLowerCase()}`}>
               <Edit3 className="h-4 w-4" />
-              <span className="sr-only">Edit deal</span>
+              <span className="sr-only">Edit {dealTerm.singular.toLowerCase()}</span>
             </Button>
           </div>
         </CardContent>
@@ -630,7 +647,7 @@ export default function PipelineView() {
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-1">
                 <Badge variant={stageVariant(stage)}>{dealStageLabel[stage]}</Badge>
-                <CardTitle className="text-base">{column.count} deals</CardTitle>
+              <CardTitle className="text-base">{column.count} {dealTerm.plural.toLowerCase()}</CardTitle>
                 <CardDescription>{crmMoney.format(column.value)} total</CardDescription>
               </div>
               <Button
@@ -639,10 +656,10 @@ export default function PipelineView() {
                 variant="outline"
                 className="h-9 w-9 shrink-0 p-0"
                 onClick={() => openAddDeal(stage)}
-                title={`Add deal to ${dealStageLabel[stage]}`}
+                title={`Add ${dealTerm.singular.toLowerCase()} to ${dealStageLabel[stage]}`}
               >
                 <Plus className="h-4 w-4" />
-                <span className="sr-only">Add deal</span>
+                <span className="sr-only">Add {dealTerm.singular.toLowerCase()}</span>
               </Button>
             </div>
           </CardHeader>
@@ -662,7 +679,7 @@ export default function PipelineView() {
               .map((summary) => renderDealCard(summary))
           ) : (
             <div className="rounded-2xl border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No deals in this stage.
+              No {dealTerm.plural.toLowerCase()} in this stage.
             </div>
           )}
         </div>
@@ -700,17 +717,46 @@ export default function PipelineView() {
     setCloseTo('')
   }
 
+  if (!settings.enableSalesPipeline) {
+    return (
+      <div className="dash-view space-y-6">
+        <Card className={panelClassName()}>
+          <CardContent className="space-y-4 p-6">
+            <Badge variant="secondary">Sales pipeline disabled</Badge>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-semibold tracking-tight">Contacts-first CRM mode</h1>
+              <p className="max-w-2xl text-sm text-muted-foreground">
+                This business is set up to focus on contacts and activities first. Enable Sales Pipeline in CRM Settings when you want to track
+                {` ${dealTerm.plural.toLowerCase()}`} and manual outreach in a board view.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Button asChild>
+                <Link to="/admin/crm/settings">Open CRM Settings</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/admin/crm/contacts">Open Contacts</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="dash-view space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Pipeline</h1>
-          <p className="text-sm text-muted-foreground">A Kanban board for deals with drag/drop, list view, and fast follow-up actions.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{dealTerm.plural} Pipeline</h1>
+          <p className="text-sm text-muted-foreground">
+            A Kanban board for {dealTerm.plural.toLowerCase()} with drag/drop, list view, and fast follow-up actions.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="outline" onClick={() => openAddDeal(filteredStage || settings.dealStages[0] || 'LEAD')}>
             <Plus className="mr-2 h-4 w-4" />
-            New Deal
+            New {dealTerm.singular}
           </Button>
           <Button asChild variant="outline">
             <Link to="/admin/crm/contacts">
@@ -736,7 +782,7 @@ export default function PipelineView() {
         </Card>
         <Card className={panelClassName()}>
           <CardContent className="p-4">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Deals closing this month</p>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">{dealTerm.plural} closing this month</p>
             <p className="mt-2 text-2xl font-semibold">{closingThisMonth}</p>
           </CardContent>
         </Card>
@@ -762,19 +808,21 @@ export default function PipelineView() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.9fr))]">
+          <div className={cn('grid gap-3', showTeamFeatures ? 'xl:grid-cols-[1.2fr_repeat(3,minmax(0,0.9fr))]' : 'xl:grid-cols-[1.2fr_repeat(2,minmax(0,0.9fr))]')}>
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" placeholder="Search deal, contact, company, tag" />
             </div>
-            <Select value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
-              <option value="ALL">All assignees</option>
-              {availableAssignees.map((assignee) => (
-                <option key={assignee} value={assignee}>
-                  {assignee}
-                </option>
-              ))}
-            </Select>
+            {showTeamFeatures ? (
+              <Select value={assignedFilter} onChange={(event) => setAssignedFilter(event.target.value)}>
+                <option value="ALL">All assignees</option>
+                {availableAssignees.map((assignee) => (
+                  <option key={assignee} value={assignee}>
+                    {assignee}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
             <Select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
               <option value="ALL">All sources</option>
               {availableSources.map((source) => (
@@ -789,7 +837,7 @@ export default function PipelineView() {
             </div>
           </div>
 
-          <div className="grid gap-3 xl:grid-cols-[1.2fr_1fr_0.8fr]">
+          <div className={cn('grid gap-3', showTeamFeatures ? 'xl:grid-cols-[1.2fr_1fr_0.8fr]' : 'xl:grid-cols-[1.2fr_1fr]')}>
             <div>
               <p className="mb-2 text-xs uppercase tracking-wide text-muted-foreground">Tag filter</p>
               <select
@@ -837,7 +885,7 @@ export default function PipelineView() {
           {(search || assignedFilter !== 'ALL' || sourceFilter !== 'ALL' || tagFilter.length || closeFrom || closeTo || filteredStage) ? (
             <div className="flex flex-wrap items-center gap-2 rounded-2xl border bg-muted/20 p-3 text-sm text-muted-foreground">
               <Badge variant="secondary">Filtered</Badge>
-              <span>{visibleDeals.length} deal(s) visible</span>
+              <span>{visibleDeals.length} {dealTerm.plural.toLowerCase()} visible</span>
               <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={clearFilters}>
                 <X className="mr-2 h-4 w-4" />
                 Clear
@@ -856,15 +904,15 @@ export default function PipelineView() {
       ) : (
         <Card className={panelClassName()}>
           <CardHeader className="pb-4">
-            <CardTitle className="text-lg">Table view</CardTitle>
-            <CardDescription>Sortable list for users who prefer scanning deals line by line.</CardDescription>
+                  <CardTitle className="text-lg">Table view</CardTitle>
+              <CardDescription>Sortable list for users who prefer scanning {dealTerm.plural.toLowerCase()} line by line.</CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto">
             <table className="w-full min-w-[1100px] border-separate border-spacing-y-2">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                   {[
-                    { key: 'contact', label: 'Deal / Contact' },
+                    { key: 'contact', label: `${dealTerm.singular} / Contact` },
                     { key: 'stage', label: 'Stage' },
                     { key: 'value', label: 'Value' },
                     { key: 'probability', label: 'Probability' },
@@ -886,7 +934,7 @@ export default function PipelineView() {
                       </button>
                     </th>
                   ))}
-                  <th className="px-3 py-2">Assigned</th>
+                  {showTeamFeatures ? <th className="px-3 py-2">Assigned</th> : null}
                   <th className="px-3 py-2 text-right">Actions</th>
                 </tr>
               </thead>
@@ -916,12 +964,14 @@ export default function PipelineView() {
                         <td className={cn('px-3 py-4 text-sm', overdue ? 'text-rose-600' : 'text-foreground')}>{formatDate(deal.expectedCloseDate)}</td>
                         <td className={cn('px-3 py-4 text-sm', stageAgeClass(daysInStage))}>{daysInStage} days</td>
                         <td className="px-3 py-4 text-sm text-muted-foreground">{crmDateTime.format(new Date(deal.updatedAt))}</td>
-                        <td className="px-3 py-4">
-                          <div className="flex items-center gap-2">
-                            <div className={cn('flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold', assignedAvatar)}>{initials}</div>
-                            <span className="text-sm">{assigned}</span>
-                          </div>
-                        </td>
+                        {showTeamFeatures ? (
+                          <td className="px-3 py-4">
+                            <div className="flex items-center gap-2">
+                              <div className={cn('flex h-8 w-8 items-center justify-center rounded-full text-xs font-semibold', assignedAvatar)}>{initials}</div>
+                              <span className="text-sm">{assigned}</span>
+                            </div>
+                          </td>
+                        ) : null}
                         <td className="rounded-r-2xl px-3 py-4 text-right">
                           <div className="flex justify-end gap-2">
                             <Button type="button" size="sm" variant="ghost" onClick={() => { setActivityDealId(deal.id); setActivityForm(initialActivityForm()); setActivityModalOpen(true) }}>
@@ -942,7 +992,7 @@ export default function PipelineView() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={9}>
+                    <td colSpan={showTeamFeatures ? 9 : 8}>
                       <div className="rounded-2xl border border-dashed p-8 text-center text-sm text-muted-foreground">No deals match the current filters.</div>
                     </td>
                   </tr>
@@ -957,9 +1007,9 @@ export default function PipelineView() {
         <DialogOverlay className="bg-slate-950/75 backdrop-blur-md" />
         <DialogContent className="w-[min(94vw,58rem)] max-h-[90vh] overflow-y-auto border border-slate-200 bg-white shadow-[0_32px_80px_rgba(15,23,42,0.35)] ring-1 ring-slate-900/5">
           <DialogHeader>
-            <DialogTitle>{editingDealId ? 'Edit Deal' : 'New Deal'}</DialogTitle>
+            <DialogTitle>{editingDealId ? `Edit ${dealTerm.singular}` : `New ${dealTerm.singular}`}</DialogTitle>
             <DialogDescription>
-              Record the customer, value, stage, and expected close date so follow-ups stay clear and the owner can see which deals need attention next.
+              Record the customer, value, stage, and expected close date so follow-ups stay clear and the owner can see which {dealTerm.plural.toLowerCase()} need attention next.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 md:grid-cols-2">
@@ -1005,10 +1055,19 @@ export default function PipelineView() {
               <label className="mb-1 block text-sm font-medium">Expected close date</label>
               <Input type="date" value={dealForm.expectedCloseDate} onChange={(event) => setDealForm((prev) => ({ ...prev, expectedCloseDate: event.target.value }))} />
             </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium">Assigned to</label>
-              <Input value={dealForm.assignedTo} onChange={(event) => setDealForm((prev) => ({ ...prev, assignedTo: event.target.value }))} placeholder="Sales owner" />
-            </div>
+            {showTeamFeatures ? (
+              <div>
+                <label className="mb-1 block text-sm font-medium">Assigned to</label>
+                <Select value={dealForm.assignedTo} onChange={(event) => setDealForm((prev) => ({ ...prev, assignedTo: event.target.value }))}>
+                  <option value="">Use default assignee</option>
+                  {(settings.teamMembers.length ? settings.teamMembers : [settings.defaultAssignee]).map((member) => (
+                    <option key={member} value={member}>
+                      {member}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            ) : null}
             <div className="md:col-span-2">
               <label className="mb-1 block text-sm font-medium">Notes</label>
               <textarea
@@ -1023,9 +1082,9 @@ export default function PipelineView() {
             <Button type="button" variant="outline" onClick={() => setDealModalOpen(false)}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleSaveDeal} disabled={!dealForm.contactId}>
-              {editingDealId ? 'Save changes' : 'Create deal'}
-            </Button>
+              <Button type="button" onClick={handleSaveDeal} disabled={!dealForm.contactId}>
+                {editingDealId ? 'Save changes' : `Create ${dealTerm.singular.toLowerCase()}`}
+              </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1035,7 +1094,7 @@ export default function PipelineView() {
         <DialogContent className="w-[min(94vw,42rem)] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Log Activity</DialogTitle>
-            <DialogDescription>{activityDeal ? `For ${activityDeal.title}` : 'Log a call, meeting, or follow-up from the pipeline.'}</DialogDescription>
+            <DialogDescription>{activityDeal ? `For ${activityDeal.title}` : `Log a call, meeting, or follow-up from the ${dealTerm.singular.toLowerCase()} board.`}</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
@@ -1091,7 +1150,7 @@ export default function PipelineView() {
           {winningDeal ? (
             <>
               <DialogHeader>
-                <DialogTitle>Deal won</DialogTitle>
+                <DialogTitle>{dealTerm.singular} won</DialogTitle>
                 <DialogDescription>Celebrate the close and move directly into invoicing.</DialogDescription>
               </DialogHeader>
               <div className="space-y-3 rounded-2xl border bg-emerald-50 p-4">
@@ -1103,7 +1162,10 @@ export default function PipelineView() {
                 <Button type="button" variant="outline" onClick={() => setWinDealId(null)}>
                   Close
                 </Button>
-                <Button type="button" onClick={createInvoiceFromDeal}>
+                <Button type="button" variant="outline" onClick={() => createInvoiceFromDeal('PROFORMA')}>
+                  Create proforma
+                </Button>
+                <Button type="button" onClick={() => createInvoiceFromDeal('TAX_INVOICE')}>
                   <CircleDollarSign className="mr-2 h-4 w-4" />
                   Create invoice
                 </Button>
@@ -1117,7 +1179,7 @@ export default function PipelineView() {
         <DialogOverlay />
         <DialogContent className="w-[min(94vw,40rem)]">
           <DialogHeader>
-            <DialogTitle>Deal lost</DialogTitle>
+            <DialogTitle>{dealTerm.singular} lost</DialogTitle>
             <DialogDescription>Pick a reason so the team can learn and re-engage later if needed.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4">

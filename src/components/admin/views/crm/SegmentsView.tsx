@@ -30,7 +30,7 @@ import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
-import type { Contact, Segment, SegmentCondition } from '@/data/crm'
+import type { Contact, CustomContactField, Segment, SegmentCondition } from '@/data/crm'
 import {
   evaluateSegmentConditions,
   getSegmentFieldMeta,
@@ -108,7 +108,7 @@ function buildSelectChoices(contacts: Contact[], defaultAssignee: string): Selec
 
 function buildDefaultCondition(
   field: SegmentCondition['field'],
-  customFields: string[],
+  customFields: CustomContactField[],
   contacts: Contact[],
   defaultAssignee: string,
   operator?: SegmentCondition['operator']
@@ -157,7 +157,7 @@ function buildDefaultCondition(
   }
 }
 
-function initialDraft(contacts: Contact[], customFields: string[], defaultAssignee: string, type: Segment['type'] = 'STATIC'): SegmentDraft {
+function initialDraft(contacts: Contact[], customFields: CustomContactField[], defaultAssignee: string, type: Segment['type'] = 'STATIC'): SegmentDraft {
   return {
     name: '',
     description: '',
@@ -173,7 +173,7 @@ function emptyMetrics(): SegmentMetrics {
   return { totalSpent: 0, purchaseCount: 0, lastPurchaseDate: undefined }
 }
 
-function getConditionInputKind(condition: SegmentCondition, customFields: string[]): 'text' | 'number' | 'date' | 'select' | 'boolean' {
+function getConditionInputKind(condition: SegmentCondition, customFields: CustomContactField[]): 'text' | 'number' | 'date' | 'select' | 'boolean' {
   const fieldType = getSegmentFieldType(condition.field, customFields)
   if (fieldType === 'date') {
     return condition.operator === 'IN_LAST_DAYS' || condition.operator === 'OLDER_THAN_DAYS' ? 'number' : 'date'
@@ -190,7 +190,7 @@ function getConditionInputKind(condition: SegmentCondition, customFields: string
   return 'text'
 }
 
-function formatFieldSummary(condition: SegmentCondition, customFields: string[]): string {
+function formatFieldSummary(condition: SegmentCondition, customFields: CustomContactField[]): string {
   const meta = getSegmentFieldMeta(condition.field, customFields)
   return `${meta.label} ${condition.operator.replace(/_/g, ' ').toLowerCase()} ${formatConditionValue(condition)}`
 }
