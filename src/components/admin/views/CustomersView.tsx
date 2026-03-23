@@ -137,6 +137,7 @@ export default function CustomersView() {
             placeholder="Search customers"
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            data-tour="customers-search"
           />
         </div>
       </div>

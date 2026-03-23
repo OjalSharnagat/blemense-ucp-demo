@@ -172,7 +172,7 @@ export default function ProductsView() {
           <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
           <p className="text-sm text-muted-foreground">Manage catalog, pricing, and stock status.</p>
         </div>
-        <Button onClick={openAddModal} className="gap-2">
+        <Button onClick={openAddModal} className="gap-2" data-tour="products-add-product">
           <Plus className="h-4 w-4" />
           Add Product
         </Button>

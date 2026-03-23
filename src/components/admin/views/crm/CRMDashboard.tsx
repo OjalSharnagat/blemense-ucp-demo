@@ -219,7 +219,7 @@ export default function CRMDashboard() {
       <div className="dash-view space-y-6">
         <ActivityDueBanner activities={dueActivities} />
 
-        <div className={panelClassName('overflow-hidden')}>
+        <div className={panelClassName('overflow-hidden')} data-tour="crm-hero">
           <div className="grid gap-6 bg-[linear-gradient(135deg,rgba(15,23,42,0.96)_0%,rgba(30,64,175,0.92)_55%,rgba(37,99,235,0.82)_100%)] p-6 text-white lg:grid-cols-[1.35fr_0.95fr]">
             <div className="space-y-4">
               <Badge className="w-fit border-white/20 bg-white/10 text-white">CRM home</Badge>
@@ -236,7 +236,7 @@ export default function CRMDashboard() {
                     <Users className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
-                <Button asChild variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10">
+                <Button asChild variant="outline" className="border-white/20 bg-white/5 text-white hover:bg-white/10" data-tour="crm-open-pipeline">
                   <Link to="/admin/crm/settings">Enable Sales Pipeline</Link>
                 </Button>
               </div>
@@ -338,7 +338,7 @@ export default function CRMDashboard() {
     <div className="dash-view space-y-6">
       <ActivityDueBanner activities={dueActivities} />
 
-      <div className={panelClassName('overflow-hidden')}>
+        <div className={panelClassName('overflow-hidden')} data-tour="crm-hero">
         <div className="grid gap-6 bg-[linear-gradient(135deg,rgba(15,23,42,0.96)_0%,rgba(30,64,175,0.92)_55%,rgba(37,99,235,0.82)_100%)] p-6 text-white lg:grid-cols-[1.4fr_0.9fr]">
           <div className="space-y-4">
             <Badge className="w-fit border-white/20 bg-white/10 text-white">CRM home</Badge>

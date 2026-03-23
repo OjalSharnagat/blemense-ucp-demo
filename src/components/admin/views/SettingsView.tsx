@@ -17,6 +17,7 @@ export default function SettingsView() {
         <CardContent>
           <Link
             to="/admin/settings/business-gst"
+            data-tour="settings-business-setup"
             className="flex items-center justify-between rounded-md border px-4 py-3 transition hover:bg-slate-50"
           >
             <div className="flex items-center gap-3">

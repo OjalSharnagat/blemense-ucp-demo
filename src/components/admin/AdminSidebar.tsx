@@ -59,6 +59,7 @@ export default function AdminSidebar({
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/dashboard"
+                data-tour="sidebar-dashboard-link"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
                 }
@@ -75,6 +76,7 @@ export default function AdminSidebar({
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/products"
+                data-tour="sidebar-products-link"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
                 }
@@ -85,6 +87,7 @@ export default function AdminSidebar({
               </NavLink>
               <NavLink
                 to="/admin/orders"
+                data-tour="sidebar-orders-link"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
                 }
@@ -125,6 +128,7 @@ export default function AdminSidebar({
               </NavLink>
               <NavLink
                 to="/admin/customers"
+                data-tour="sidebar-customers-link"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
                 }
@@ -146,6 +150,7 @@ export default function AdminSidebar({
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/crm"
+                data-tour="sidebar-crm-link"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
                 }
@@ -218,6 +223,7 @@ export default function AdminSidebar({
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/billing"
+                data-tour="sidebar-billing-link"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
                 }
@@ -227,11 +233,12 @@ export default function AdminSidebar({
                 Billing
               </NavLink>
               {businessMode.showGstReturns ? (
-                <NavLink
-                  to="/admin/gst-returns"
-                  className={({ isActive }) =>
-                    cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
-                  }
+              <NavLink
+                to="/admin/gst-returns"
+                data-tour="sidebar-gst-returns-link"
+                className={({ isActive }) =>
+                  cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
+                }
                   onClick={onClose}
                 >
                   <FileText className="h-4 w-4" />
@@ -256,6 +263,7 @@ export default function AdminSidebar({
             <div className="mt-2 space-y-1">
               <NavLink
                 to="/admin/settings"
+                data-tour="sidebar-settings-link"
                 className={({ isActive }) =>
                   cn(linkBase, isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800/70 hover:text-slate-100')
                 }

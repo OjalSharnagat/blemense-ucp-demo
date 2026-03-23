@@ -221,7 +221,7 @@ export default function OrdersView() {
             </div>
           ) : null}
           {!isLoading ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3" data-tour="orders-filters">
             <Input
               value={search}
               onChange={(event) => setSearch(event.target.value)}

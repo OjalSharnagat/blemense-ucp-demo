@@ -62,7 +62,7 @@ export default function BillingView() {
             Manage {businessMode.mode === 'UNREGISTERED' ? 'bills' : businessMode.mode === 'COMPOSITION' ? 'bills of supply' : 'invoices, credit notes, and debit notes'}.
           </p>
         </div>
-        <Button asChild className="gap-2">
+        <Button asChild className="gap-2" data-tour="billing-new-document">
           <Link to="/admin/billing/new">
             <FilePlus2 className="h-4 w-4" />
             New {businessMode.mode === 'UNREGISTERED' ? 'bill' : businessMode.mode === 'COMPOSITION' ? 'bill of supply' : 'invoice'}

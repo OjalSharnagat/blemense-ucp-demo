@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, Menu, Search } from 'lucide-react'
+import { Bell, ChevronDown, Menu, Search, Sparkles } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { Button } from '../ui/button'
 import { Input } from '../ui/input'
@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu'
+import { useAdminTour } from './AdminTour'
 
 const titles: Record<string, string> = {
   dashboard: 'Dashboard',
@@ -20,6 +21,7 @@ const titles: Record<string, string> = {
 
 export default function AdminTopbar({ onOpenSidebar }: { onOpenSidebar: () => void }) {
   const location = useLocation()
+  const { startTour } = useAdminTour()
   const segment = location.pathname.split('/')[2] || 'dashboard'
   const title = titles[segment] ?? 'Admin'
   const adminName = 'Naman Arora'
@@ -48,6 +50,17 @@ export default function AdminTopbar({ onOpenSidebar }: { onOpenSidebar: () => vo
 
         <Button variant="ghost" size="icon" aria-label="Notifications">
           <Bell className="h-4 w-4" />
+        </Button>
+
+        <Button
+          variant="ghost"
+          className="h-9 gap-2 px-3"
+          onClick={startTour}
+          aria-label="Take product tour"
+          data-tour="tour-trigger"
+        >
+          <Sparkles className="h-4 w-4" />
+          <span className="hidden sm:inline">Tour</span>
         </Button>
 
         <DropdownMenu>

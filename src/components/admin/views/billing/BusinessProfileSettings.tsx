@@ -135,7 +135,7 @@ export default function BusinessProfileSettings() {
             <CheckCircle2 className="h-3.5 w-3.5" />
             Saved in this browser
           </span>
-          <Button onClick={save}>
+          <Button onClick={save} data-tour="business-profile-save">
             <Save className="mr-2 h-4 w-4" />
             Save Profile
           </Button>

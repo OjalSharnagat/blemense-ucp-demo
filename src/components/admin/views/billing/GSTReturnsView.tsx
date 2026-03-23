@@ -681,7 +681,7 @@ export default function GSTReturnsView() {
         </Card>
       ) : null}
 
-      <Card>
+      <Card data-tour="gst-returns-period">
         <CardHeader>
           <CardTitle className="text-base">Return Period</CardTitle>
         </CardHeader>

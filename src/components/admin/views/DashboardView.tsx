@@ -650,7 +650,7 @@ export default function DashboardView() {
             </CardContent>
           </Card>
 
-          <Card className="analytics-hero relative overflow-hidden border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white shadow-xl">
+          <Card className="analytics-hero relative overflow-hidden border-slate-200 bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 text-white shadow-xl" data-tour="dashboard-hero">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_35%),radial-gradient(circle_at_bottom_left,rgba(59,130,246,0.25),transparent_34%),linear-gradient(135deg,rgba(15,23,42,0.1),rgba(59,130,246,0.08))]" />
             <CardContent className="analytics-hero-content relative grid gap-8 p-6 lg:grid-cols-[1.15fr_0.85fr] lg:items-center lg:p-8">
               <div className="space-y-5">
